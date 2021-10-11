@@ -1,4 +1,4 @@
-from utils import check_region_data
+from utils.utils import check_region_data
 import numpy as np
 import pandas as pd
 from datetime import date, timedelta
@@ -7,10 +7,18 @@ import time
 from epiweeks import Week
 from scipy import stats
 from itertools import compress
-
+import pdb
+import pickle
 # ew50 remove
 death_remove = []
 hosp_remove = []
+
+regions_list = ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC',
+            'FL', 'GA', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA',
+            'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE',
+            'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK',
+            'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT',
+            'VA', 'WA', 'WV', 'WI', 'WY', 'X']
 
 
 # get cumulative
@@ -41,7 +49,7 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
     else:
         k_ahead=4
         datafile='./data/covid-hospitalization-all-state-merged_vEW'+str(data_ew)+'.csv'
-
+    # pdb.set_trace()
     if not check_region_data(datafile,region,target_name,ew): # checks if region is there in our dataset
         return 0    
 
@@ -64,7 +72,6 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
             path=res_path+'mort_model_week_' + str(next) + '_predictions.pkl'
         
         
-        
         if not os.path.exists(path):
             print(path)
             continue
@@ -73,10 +80,10 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
         
         with open(path, 'rb') as f:
             data_pickle = pickle.load(f)
-        
-        for i in data_pickle:
-            pred = float(i)
-            predictions.append(pred)
+
+        idx = regions_list.index(region)
+        predictions = data_pickle[:,idx]
+        # pdb.set_trace()
         
         
 #         with open(path, 'r') as f:
@@ -95,8 +102,29 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
         quantile_cuts = [0.01, 0.025] + list(np.arange(0.05, 0.95+0.05, 0.05,dtype=float)) + [0.975, 0.99]
         # import pdb
         # pdb.set_trace()
+        if target_name=='death':
+            MULT = 15
+        elif target_name=='hosp':
+            MULT = 30
+        
+        
+        median = np.median(predictions)
+        new_predictions = []
+        for pred in predictions:
+            if pred < median:
+                deviation = median - pred
+                deviation = deviation*MULT
+                pred = median - deviation
+            if pred > median:
+                deviation = pred - median
+                deviation = deviation*MULT
+                pred = median + deviation
+            if pred < 0:
+                pred = 0
+            new_predictions.append(pred)
+        predictions = new_predictions
+
         quantiles = np.quantile(predictions, quantile_cuts)
-        # print(quantiles)
         df = pd.read_csv(datafile, header=0)
         df = df[(df['region']==region)]
         # add to list
@@ -194,11 +222,11 @@ if __name__ == "__main__":
     print(suffix)
 
     for region in temp_regions:
-        parse(region,ew,target_name,None,suffix,daily,True,PLOT)
+        parse(region,ew,target_name,suffix,daily,True,PLOT)
     target_name='hosp'
     suffix='M1_daily_5_vEW'+str(ew)
     temp_regions = regions
     daily=True
     for region in temp_regions:
-        parse(region,ew,target_name,None,suffix,daily,True,PLOT)
+        parse(region,ew,target_name,suffix,daily,True,PLOT)
     quit()
