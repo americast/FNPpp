@@ -53,16 +53,37 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
     for next in range(1,k_ahead+1):
         import os
         # NOTE: change here to read from pkl
-        path=res_path+'EW'+str(ew)+'/'+target_name+'_'+region+'_next'+str(next)+suffix+'.csv'
+        
+#         path=res_path+'EW'+str(ew)+'/'+target_name+'_'+region+'_next'+str(next)+suffix+'.csv'
+      
+    
+#         Yet to test these edits      
+        if(daily):
+            path=res_path+ 'deploy_week_' + str(next) + '_predictions.pkl'
+        else:
+            path=res_path+'mort_model_week_' + str(next) + '_predictions.pkl'
+        
+        
+        
         if not os.path.exists(path):
             print(path)
             continue
         predictions = []
-        with open(path, 'r') as f:
-            for line in f:
-                # print(line, end='')
-                pred = float(line)
-                predictions.append(pred)
+        
+        
+        with open(path, 'rb') as f:
+            data_pickle = pickle.load(f)
+        
+        for i in data_pickle:
+            pred = float(i)
+            predictions.append(pred)
+        
+        
+#         with open(path, 'r') as f:
+#             for line in f:
+#                 # print(line, end='')
+#                 pred = float(line)
+#                 predictions.append(pred)
             
         # filter outliers
         # z_scores = stats.zscore(predictions)
