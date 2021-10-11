@@ -107,7 +107,6 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
         elif target_name=='hosp':
             MULT = 30
         
-        
         median = np.median(predictions)
         new_predictions = []
         for pred in predictions:
