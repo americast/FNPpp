@@ -65,11 +65,12 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
 #         path=res_path+'EW'+str(ew)+'/'+target_name+'_'+region+'_next'+str(next)+suffix+'.csv'
       
     
-#         Yet to test these edits      
+#         change week number on running 
+        week_current = 41
         if(daily):
-            path=res_path+ 'deploy_week_' + str(next) + '_predictions.pkl'
+            path=res_path+ 'deploy_week_' + str(week_current) +'_' + str(next) + '_predictions.pkl'
         else:
-            path=res_path+'mort_model_week_' + str(next) + '_predictions.pkl'
+            path=res_path+'mort_deploy_week_' + str(week_current) +'_' + str(next) + '_predictions.pkl'
         
         
         if not os.path.exists(path):
