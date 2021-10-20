@@ -9,9 +9,15 @@ from scipy import stats
 from itertools import compress
 import pdb
 import pickle
-# ew50 remove
+import os
+# ew202141 remove
+death_remove = ['TX']
+hosp_remove = ['AR','LA']
+death_replace_4th_with_3th = ['X','AL','AR','GA','ID','IN','LA','NV','OR','SC','TX','WV','WA']
+# ew202142 remove
 death_remove = []
 hosp_remove = []
+death_replace_4th_with_3th = []
 
 regions_list = ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC',
             'FL', 'GA', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA',
@@ -33,6 +39,26 @@ def get_cumsum_region(datafile,region,target_name,ew):
         print('error', region,target_name)
         time.sleep(2)
     return cum
+
+def get_predictions_from_pkl(next,res_path,region):
+    """ reads from pkl, returns predictions for a region as a list"""
+    week_current = int(str(Week.thisweek(system="CDC") - 1)[-2:])
+    if(daily):
+        path=res_path+ 'deploy_week_' + str(week_current) +'_' + str(next) + '_predictions.pkl'
+    else:
+        path=res_path+'mort_deploy_week_' + str(week_current) +'_' + str(next) + '_predictions.pkl'
+
+    if not os.path.exists(path):
+        print(path)
+        return None
+    predictions = []
+    
+    with open(path, 'rb') as f:
+        data_pickle = pickle.load(f)
+
+    idx = regions_list.index(region)
+    predictions = data_pickle[:,idx]
+    return predictions
 
 def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=None,res_path='./results/',sub_path='./submissions/'):
     """
@@ -59,55 +85,22 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
     lower_bounds_preds = []
     upper_bounds_preds = []
     for next in range(1,k_ahead+1):
-        import os
-        # NOTE: change here to read from pkl
-        
-#         path=res_path+'EW'+str(ew)+'/'+target_name+'_'+region+'_next'+str(next)+suffix+'.csv'
-      
-    
-#         change week number on running 
-        week_current = 41
-        if(daily):
-            path=res_path+ 'deploy_week_' + str(week_current) +'_' + str(next) + '_predictions.pkl'
-        else:
-            path=res_path+'mort_deploy_week_' + str(week_current) +'_' + str(next) + '_predictions.pkl'
-        
-        
-        if not os.path.exists(path):
-            print(path)
-            continue
-        predictions = []
-        
-        
-        with open(path, 'rb') as f:
-            data_pickle = pickle.load(f)
 
-        idx = regions_list.index(region)
-        predictions = data_pickle[:,idx]
-        # pdb.set_trace()
+        predictions = get_predictions_from_pkl(next,res_path,region)
         
-        
-#         with open(path, 'r') as f:
-#             for line in f:
-#                 # print(line, end='')
-#                 pred = float(line)
-#                 predictions.append(pred)
-            
-        # filter outliers
-        # z_scores = stats.zscore(predictions)
-        # abs_z_scores = np.abs(z_scores)
-        # fil = (abs_z_scores < LIMIT)
-        # predictions=list(compress(predictions, fil))
-        # print(np.mean(predictions))
-        
-        quantile_cuts = [0.01, 0.025] + list(np.arange(0.05, 0.95+0.05, 0.05,dtype=float)) + [0.975, 0.99]
-        # import pdb
-        # pdb.set_trace()
         if target_name=='death':
             MULT = 15
+            if next==4:
+                if region in death_replace_4th_with_3th:
+                    predictions = get_predictions_from_pkl(3,res_path,region)
+                    # subtract one (just to make them different)
+                    predictions = [pred-10 for pred in predictions]
         elif target_name=='hosp':
             MULT = 30
-        
+
+        if predictions is None:
+            continue
+        quantile_cuts = [0.01, 0.025] + list(np.arange(0.05, 0.95+0.05, 0.05,dtype=float)) + [0.975, 0.99]
         median = np.median(predictions)
         new_predictions = []
         for pred in predictions:
