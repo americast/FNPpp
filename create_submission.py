@@ -11,10 +11,14 @@ import pdb
 import pickle
 import os
 # ew202141 remove
-death_remove = ['TX']
-hosp_remove = ['AR','LA']
+death_remove = ['TX','AZ','CT','CO']
 death_replace_4th_with_3th = ['X','AL','AR','GA','ID','IN','LA','NV','OR','SC','TX','WV','WA']
+hosp_remove = ['AR','LA']
 # ew202142 remove
+death_remove = ['X','NY']
+death_replace_4th_with_3th = ['MI','MN','AZ','CT','ID','NJ','NM','NY','OH','OK','PA','VT']
+hosp_remove = ['X','FL','MO','MS','NV','OK','AL','KY','GA','IA','ID','IL','IN','NC','SC','TN','TX','WA','WI']
+# ew202143 remove
 death_remove = []
 hosp_remove = []
 death_replace_4th_with_3th = []
@@ -26,19 +30,35 @@ regions_list = ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC',
             'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT',
             'VA', 'WA', 'WV', 'WI', 'WY', 'X']
 
+LIMIT=3 # for outliers
 
 # get cumulative
 def get_cumsum_region(datafile,region,target_name,ew):
     df = pd.read_csv(datafile, header=0)
     df = df[(df['region']==region)]
-    if target_name=='death' or 'cum_death':
+    if target_name=='death':
         cum = df.loc[:,'death_jhu_incidence'].sum()
     elif target_name=='hosp':
-        cum = df.loc[:,'hospitalizedIncrease'].sum()
+        cum = None
+        # raise Exception('not implemented')
+        # cum = df.loc[:,'hospitalizedIncrease'].sum()
     else:
         print('error', region,target_name)
         time.sleep(2)
     return cum
+
+def get_max_value(datafile,region,target_name,ew):
+    df = pd.read_csv(datafile, header=0)
+    df = df[(df['region']==region)]
+    if target_name=='death':
+        val = df.loc[:,'death_jhu_incidence'].max()
+    elif target_name=='hosp':
+        val = df.loc[:,'cdc_hospitalized'].max()
+        print('max val',val)
+    else:
+        print('error', region,target_name)
+        time.sleep(2)
+    return val
 
 def get_predictions_from_pkl(next,res_path,region):
     """ reads from pkl, returns predictions for a region as a list"""
@@ -80,6 +100,7 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
         return 0    
 
     prev_cum = get_cumsum_region(datafile,region,target_name,ew)
+    max_val = get_max_value(datafile,region,target_name,ew)
     print(region,prev_cum)
     point_preds = []
     lower_bounds_preds = []
@@ -89,33 +110,39 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
         predictions = get_predictions_from_pkl(next,res_path,region)
         
         if target_name=='death':
-            MULT = 15
+            MULT = 1.2
             if next==4:
                 if region in death_replace_4th_with_3th:
                     predictions = get_predictions_from_pkl(3,res_path,region)
                     # subtract one (just to make them different)
                     predictions = [pred-10 for pred in predictions]
         elif target_name=='hosp':
-            MULT = 30
+            MULT = 3.5
 
         if predictions is None:
             continue
         quantile_cuts = [0.01, 0.025] + list(np.arange(0.05, 0.95+0.05, 0.05,dtype=float)) + [0.975, 0.99]
         median = np.median(predictions)
-#         new_predictions = []
-#         for pred in predictions:
-#             if pred < median:
-#                 deviation = median - pred
-#                 deviation = deviation*MULT
-#                 pred = median - deviation
-#             if pred > median:
-#                 deviation = pred - median
-#                 deviation = deviation*MULT
-#                 pred = median + deviation
-#             if pred < 0:
-#                 pred = 0
-#             new_predictions.append(pred)
-#         predictions = new_predictions
+        new_predictions = []
+        for pred in predictions:
+            if pred < median:
+                deviation = median - pred
+                deviation = deviation*MULT
+                pred = median - deviation
+            if pred > median:
+                deviation = pred - median
+                deviation = deviation*MULT
+                pred = median + deviation
+            if pred < 0:
+                pred = 0
+            new_predictions.append(pred)
+        predictions = new_predictions
+
+        # filter outliers
+        z_scores = stats.zscore(predictions)
+        abs_z_scores = np.abs(z_scores)
+        fil = (abs_z_scores < LIMIT) & (predictions < max_val)  # filter too big
+        predictions=list(compress(predictions, fil))
 
         quantiles = np.quantile(predictions, quantile_cuts)
         df = pd.read_csv(datafile, header=0)
