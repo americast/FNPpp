@@ -102,20 +102,20 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
             continue
         quantile_cuts = [0.01, 0.025] + list(np.arange(0.05, 0.95+0.05, 0.05,dtype=float)) + [0.975, 0.99]
         median = np.median(predictions)
-        new_predictions = []
-        for pred in predictions:
-            if pred < median:
-                deviation = median - pred
-                deviation = deviation*MULT
-                pred = median - deviation
-            if pred > median:
-                deviation = pred - median
-                deviation = deviation*MULT
-                pred = median + deviation
-            if pred < 0:
-                pred = 0
-            new_predictions.append(pred)
-        predictions = new_predictions
+#         new_predictions = []
+#         for pred in predictions:
+#             if pred < median:
+#                 deviation = median - pred
+#                 deviation = deviation*MULT
+#                 pred = median - deviation
+#             if pred > median:
+#                 deviation = pred - median
+#                 deviation = deviation*MULT
+#                 pred = median + deviation
+#             if pred < 0:
+#                 pred = 0
+#             new_predictions.append(pred)
+#         predictions = new_predictions
 
         quantiles = np.quantile(predictions, quantile_cuts)
         df = pd.read_csv(datafile, header=0)
