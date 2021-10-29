@@ -1,19 +1,19 @@
-# Running the CAMul code
+## Running the CAMul code
 
-## To set up the environment : 
+#### To set up the environment : 
 
 ./scripts/setup.sh
 
 
 
-## To preprocess the mort and hosp computations :
+#### To preprocess the mort and hosp computations :
 
 ./scripts/mort_preprocess.sh 202142
 ./scripts/hosp_preprocess.sh 202142
 
 
 
-## For hosp predictions (train and test):
+#### For hosp predictions (train and test):
 
 python train_hosp.py -e 202142 -m deploy_week_42_1 -c True -d 1  —start_model hosp_deploy_week_41_1
 
@@ -30,7 +30,7 @@ python train_hosp.py -e 202142 -m deploy_week_42_1 -c True -d 1  —start_model 
 
 
 
-## For mort predictions (train and test):
+#### For mort predictions (train and test):
 
 python train_covid2.py -e 202142 -c True -m mort_deploy_week_42_1 -w 1 —start_model mort_deploy_week_41_1
 
