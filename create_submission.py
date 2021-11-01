@@ -19,8 +19,8 @@ death_remove = ['X','NY']
 death_replace_4th_with_3th = ['MI','MN','AZ','CT','ID','NJ','NM','NY','OH','OK','PA','VT']
 hosp_remove = ['X','FL','MO','MS','NV','OK','AL','KY','GA','IA','ID','IL','IN','NC','SC','TN','TX','WA','WI']
 # ew202143 remove
-death_remove = []
-hosp_remove = []
+death_remove = ['X','WA']
+hosp_remove = ["X","FL","LA","MO","MS","OK","SC","TX","AL","AR"]
 death_replace_4th_with_3th = []
 
 regions_list = ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC',
