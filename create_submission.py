@@ -22,6 +22,14 @@ hosp_remove = ['X','FL','MO','MS','NV','OK','AL','KY','GA','IA','ID','IL','IN','
 death_remove = ['X','WA']
 hosp_remove = ["X","FL","LA","MO","MS","OK","SC","TX","AL","AR"]
 death_replace_4th_with_3th = []
+# ew202144 remove
+death_remove = ['NY','IL']
+hosp_remove = ['X','OR','OK','SC','FL','GA','NV','NC','MS','MO','LA','IN','KY','AL','NC','AR','TX','VA']
+death_replace_4th_with_3th = ['NH','NM']
+# ew202144 remove
+death_remove = []
+hosp_remove = []
+death_replace_4th_with_3th = []
 
 regions_list = ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC',
             'FL', 'GA', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA',
