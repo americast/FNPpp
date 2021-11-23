@@ -26,7 +26,15 @@ death_replace_4th_with_3th = []
 death_remove = ['NY','IL']
 hosp_remove = ['X','OR','OK','SC','FL','GA','NV','NC','MS','MO','LA','IN','KY','AL','NC','AR','TX','VA']
 death_replace_4th_with_3th = ['NH','NM']
-# ew202144 remove
+# ew202145 remove
+death_remove = ['NY','OH','PA']
+hosp_remove = ['X','FL','KY','LA','SC','AL','AR','ID','MO','NC','OR','PA','SC']
+death_replace_4th_with_3th = ['NC']
+# ew202146 remove
+death_remove = []
+hosp_remove = ['LA']
+death_replace_4th_with_3th = ['SD']
+# ew202147 remove
 death_remove = []
 hosp_remove = []
 death_replace_4th_with_3th = []
@@ -38,7 +46,7 @@ regions_list = ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC',
             'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT',
             'VA', 'WA', 'WV', 'WI', 'WY', 'X']
 
-LIMIT=3 # for outliers
+
 
 # get cumulative
 def get_cumsum_region(datafile,region,target_name,ew):
@@ -74,7 +82,8 @@ def get_predictions_from_pkl(next,res_path,region):
     if(daily):
         path=res_path+ 'deploy_week_' + str(week_current) +'_' + str(next) + '_predictions.pkl'
     else:
-        path=res_path+'mort_deploy_week_' + str(week_current) +'_' + str(next) + '_predictions.pkl'
+        # path=res_path+'mort_deploy_week_' + str(week_current) +'_' + str(next) + '_predictions.pkl'
+        path=res_path+'mort_deploy_week_' + str(week_current) +'_' + str(next) + '_predictions_refined.pkl'# b2f
 
     if not os.path.exists(path):
         print(path)
@@ -119,13 +128,16 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
         
         if target_name=='death':
             MULT = 1.2
+            LIMIT=3 # for outliers
             if next==4:
                 if region in death_replace_4th_with_3th:
                     predictions = get_predictions_from_pkl(3,res_path,region)
                     # subtract one (just to make them different)
                     predictions = [pred-10 for pred in predictions]
         elif target_name=='hosp':
-            MULT = 3.5
+            # MULT = 3.5
+            MULT = 3  # changed to 2 on 11/15
+            LIMIT= 1.3 # for outliers
 
         if predictions is None:
             continue
@@ -149,7 +161,7 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
         # filter outliers
         z_scores = stats.zscore(predictions)
         abs_z_scores = np.abs(z_scores)
-        fil = (abs_z_scores < LIMIT) & (predictions < max_val)  # filter too big
+        fil = (abs_z_scores < LIMIT) & (predictions < max_val) # filter too big, TODO: too small & (predictions > min_val)
         predictions=list(compress(predictions, fil))
 
         quantiles = np.quantile(predictions, quantile_cuts)
