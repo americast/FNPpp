@@ -35,6 +35,10 @@ death_remove = []
 hosp_remove = ['LA']
 death_replace_4th_with_3th = ['SD']
 # ew202147 remove
+death_remove = ['MA','NE','NY']  # track 'IL','IN'
+hosp_remove = ['AL','FL','LA','MS']
+death_replace_4th_with_3th = []
+# ew202148 remove
 death_remove = []
 hosp_remove = []
 death_replace_4th_with_3th = []
@@ -82,8 +86,8 @@ def get_predictions_from_pkl(next,res_path,region):
     if(daily):
         path=res_path+ 'deploy_week_' + str(week_current) +'_' + str(next) + '_predictions.pkl'
     else:
-        # path=res_path+'mort_deploy_week_' + str(week_current) +'_' + str(next) + '_predictions.pkl'
-        path=res_path+'mort_deploy_week_' + str(week_current) +'_' + str(next) + '_predictions_refined.pkl'# b2f
+        path=res_path+'mort_deploy_week_' + str(week_current) +'_' + str(next) + '_predictions.pkl' # normal
+        # path=res_path+'mort_deploy_week_' + str(week_current) +'_' + str(next) + '_predictions_refined.pkl'# b2f
 
     if not os.path.exists(path):
         print(path)
@@ -136,7 +140,12 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
                     predictions = [pred-10 for pred in predictions]
         elif target_name=='hosp':
             # MULT = 3.5
-            MULT = 3  # changed to 2 on 11/15
+            # MULT = 3  # changed to 2 on 11/15
+            # update on 11/29
+            if next < 13:
+                MULT = 3.5
+            else:
+                MULT = 1
             LIMIT= 1.3 # for outliers
 
         if predictions is None:
