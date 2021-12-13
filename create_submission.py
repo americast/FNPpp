@@ -39,9 +39,13 @@ death_remove = ['MA','NE','NY']  # track 'IL','IN'
 hosp_remove = ['AL','FL','LA','MS']
 death_replace_4th_with_3th = []
 # ew202148 remove
-death_remove = []
-hosp_remove = []
+death_remove = ['OH'] #NJ
+hosp_remove = ['X','AL','FL','GA','LA','MI','MS','SC','TX','CA','ID','KY'] #
 death_replace_4th_with_3th = []
+# ew202149 remove
+death_remove = ['X','CT','DC','IL','MA','MI','MO','NJ','NY','OH','ME']
+hosp_remove = []
+death_replace_4th_with_3th = ['GA','IL','ME','NJ','NY','RI','VT']
 
 regions_list = ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC',
             'FL', 'GA', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA',
@@ -86,8 +90,8 @@ def get_predictions_from_pkl(next,res_path,region):
     if(daily):
         path=res_path+ 'deploy_week_' + str(week_current) +'_' + str(next) + '_predictions.pkl'
     else:
-        path=res_path+'mort_deploy_week_' + str(week_current) +'_' + str(next) + '_predictions.pkl' # normal
-        # path=res_path+'mort_deploy_week_' + str(week_current) +'_' + str(next) + '_predictions_refined.pkl'# b2f
+        # path=res_path+'mort_deploy_week_' + str(week_current) +'_' + str(next) + '_predictions.pkl' # normal
+        path=res_path+'mort_deploy_week_' + str(week_current) +'_' + str(next) + '_predictions_refined.pkl'# b2f
 
     if not os.path.exists(path):
         print(path)
@@ -131,7 +135,8 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
         predictions = get_predictions_from_pkl(next,res_path,region)
         
         if target_name=='death':
-            MULT = 1.2
+            # MULT = 1.2
+            MULT = 2
             LIMIT=3 # for outliers
             if next==4:
                 if region in death_replace_4th_with_3th:
@@ -276,6 +281,6 @@ if __name__ == "__main__":
     suffix='M1_daily_5_vEW'+str(ew)
     temp_regions = regions
     daily=True
-    for region in temp_regions:
-        parse(region,ew,target_name,suffix,daily,True,PLOT)
+    # for region in temp_regions:
+    #     parse(region,ew,target_name,suffix,daily,True,PLOT)
     quit()
