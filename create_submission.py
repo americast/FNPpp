@@ -46,6 +46,10 @@ death_replace_4th_with_3th = []
 death_remove = ['X','CT','DC','IL','MA','MI','MO','NJ','NY','OH','ME']
 hosp_remove = []
 death_replace_4th_with_3th = ['GA','IL','ME','NJ','NY','RI','VT']
+# ew202150 remove
+death_remove = []
+hosp_remove = []
+death_replace_4th_with_3th = []
 
 regions_list = ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC',
             'FL', 'GA', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA',
