@@ -151,10 +151,10 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
             # MULT = 3.5
             # MULT = 3  # changed to 2 on 11/15
             # update on 11/29
-            if next < 13:
-                MULT = 3.5
-            else:
-                MULT = 1
+            # if next < 13:
+            #     MULT = 3.5
+            # else:
+            MULT = 1
             LIMIT= 1.3 # for outliers
 
         if predictions is None:
@@ -179,7 +179,8 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
         # filter outliers
         z_scores = stats.zscore(predictions)
         abs_z_scores = np.abs(z_scores)
-        fil = (abs_z_scores < LIMIT) & (predictions < max_val) # filter too big, TODO: too small & (predictions > min_val)
+        # fil = (abs_z_scores < LIMIT) & (predictions < max_val) # filter too big, TODO: too small & (predictions > min_val)
+        fil = (abs_z_scores < LIMIT)
         predictions=list(compress(predictions, fil))
 
         quantiles = np.quantile(predictions, quantile_cuts)
