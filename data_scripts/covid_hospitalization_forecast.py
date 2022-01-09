@@ -714,21 +714,28 @@ def read_iqvia(inputdir,epiweek_date,state_index,start_week,end_week):
 def read_cdc_hosp(inputdir,epiweek_date,state_index,end_week):
     data=pd.read_csv(inputdir+"COVID-19_Reported_Timeseries.csv")
     #data=pd.read_csv(inputdir+"reported_hospital_timeseries.csv")
-
+    
     #data=data.fillna(0)
     state_names=list(state_index.keys())
     week_cases={}
+    flu_week_cases={}
     #cols_d=list(data.columns)
     #print(cols_d)
     #cols=cols[2:]
     cols=['cdc_hospitalized']
-
+    flu_cols=['cdc_flu_hosp']
+    
     cols_to_check=['previous_day_admission_adult_covid_confirmed', 'previous_day_admission_pediatric_covid_confirmed']
+    flu_cols_to_check=['previous_day_admission_influenza_confirmed']
     for c in cols:
         week_cases[c]=np.empty((len(state_names),len(epiweek_date)))
-
+    for c in flu_cols:
+        flu_week_cases[c]=np.empty((len(state_names),len(epiweek_date)))
+    
     week_cases[c][:][:]=np.nan
     week_cases[c][0][:]=0
+    flu_week_cases[c][:][:]=np.nan
+    flu_week_cases[c][0][:]=0
     for index,row in data.iterrows():
         if row['state'] in state_index.keys():
             state_id=state_index[row['state']]
@@ -739,7 +746,7 @@ def read_cdc_hosp(inputdir,epiweek_date,state_index,end_week):
         if week_id!=-1:
             ttl=0
             flag_is_not_nan=False
-            for c in cols_to_check:
+            for c in cols_to_check: 
                 if pd.isnull(row[c])==False:
                     ttl+=float(row[c])
                     flag_is_not_nan=True
@@ -750,7 +757,22 @@ def read_cdc_hosp(inputdir,epiweek_date,state_index,end_week):
                 week_cases[cols[0]][0][week_id]+=ttl
             else:
                 week_cases[cols[0]][state_id][week_id]=np.nan
-
+                
+            # same for week
+            for c in flu_cols_to_check: 
+                if pd.isnull(row[c])==False:
+                    ttl+=float(row[c])
+                    flag_is_not_nan=True
+            if flag_is_not_nan:
+                if np.isnan(flu_week_cases[cols[0]][state_id][week_id]):
+                    flu_week_cases[cols[0]][state_id][week_id]=0
+                flu_week_cases[cols[0]][state_id][week_id]+=ttl
+                flu_week_cases[cols[0]][0][week_id]+=ttl
+            else:
+                flu_week_cases[cols[0]][state_id][week_id]=np.nan
+                
+            
+                    
     '''
     week_cases[c][0]=np.zeros(len(epiweek_date))
     for s in range(1,len(state_names)):
@@ -759,9 +781,9 @@ def read_cdc_hosp(inputdir,epiweek_date,state_index,end_week):
             #week_cases[c][s][-1]=np.nan #considering data 2 weeks lag
             #week_cases[c][s][-2]=np.nan
     '''
-    unit_test(week_cases,cols,epiweek_date,state_index,"unit_test/cdc_hosp.csv")
-
-    return week_cases,cols
+    unit_test(week_cases,cols,epiweek_date,state_index,"unit_test/cdc_hosp.csv") 
+    
+    return week_cases,cols,flu_week_cases,flu_cols
 
 
 # In[47]:
@@ -1293,8 +1315,8 @@ def merge_data_region(mobility,kinsadir,iqvia,covidnet,hosp,cols_m,cols_k,cols_q
 # In[57]:
 
 
-def merge_data_state(mobility,apple,vacc,vac_delphi,cdc_hosp,dex,kinsa,covidnet,hosp,excess,jhu,survey,em_visit,jhu_case,hosp_new_res,
-                     cols_m,cols_a,cols_vacc,cols_vac_delphi,cols_cdc,cols_d,cols_k,cols_net,
+def merge_data_state(mobility,apple,vacc,vac_delphi,cdc_hosp,flu_hosp,dex,kinsa,covidnet,hosp,excess,jhu,survey,em_visit,jhu_case,hosp_new_res,
+                     cols_m,cols_a,cols_vacc,cols_vac_delphi,cols_cdc,cols_flu,cols_d,cols_k,cols_net,
                      cols_hosp,cols_excess,cols_jhu,cols_survey,cols_v,cols_jhu_case,cols_hosp_new_res,
                      state_fips,epiweek,epiweek_date,region_names,outputdir,outfilename):
 
@@ -1317,6 +1339,8 @@ def merge_data_state(mobility,apple,vacc,vac_delphi,cdc_hosp,dex,kinsa,covidnet,
             temp_data[c]=apple[c][reg][:]
         for c in cols_cdc:
             temp_data[c]=cdc_hosp[c][reg][:]
+        for c in cols_flu:
+            temp_data[c]=flu_hosp[c][reg][:]
         for c in cols_d:
             temp_data[c]=dex[c][reg][:]
         for c in cols_vacc:
@@ -1461,7 +1485,7 @@ if __name__ == "__main__":
 
     print('CDC hospitalization')
     end_week=int(week_num) #2021
-    cdc_hosp,cols_cdc=read_cdc_hosp(data_path,epiweek_date,state_index,end_week)
+    cdc_hosp,cols_cdc,flu_hosp,cols_flu=read_cdc_hosp(data_path,epiweek_date,state_index,end_week)
 
     ### PROCESSING APPLE MOBILITY per date for Berkely guys####
     #read_apple_mobility_per_date(data_path,epiweek_date,state_index,dic_names_to_abbv,start_week_m,end_week_m)
@@ -1543,9 +1567,9 @@ if __name__ == "__main__":
     #Change outputdir and outfilename with the path and name of out file
     outputdir=data_path #"/Users/anikat/Downloads/covid-hospitalization-data/"
     outfile="covid-hospitalization-all-state-merged_vEW" + year_week_num+".csv"
-    merge_data_state(mobility_state,apple_mobility,vacc,vacc_delphi,cdc_hosp,dex,kinsa_state,data_covidnet,data_hosp,excess_death,
+    merge_data_state(mobility_state,apple_mobility,vacc,vacc_delphi,cdc_hosp,flu_hosp,dex,kinsa_state,data_covidnet,data_hosp,excess_death,
                      jhu_death,survey,em_visit,jhu_cases,hosp_new_res,
-                     cols_m,cols_a,cols_vacc,cols_vacc_delphi,cols_cdc,cols_d,cols_k,cols_net,cols_hosp,cols_excess,
+                     cols_m,cols_a,cols_vacc,cols_vacc_delphi,cols_cdc,cols_flu,cols_d,cols_k,cols_net,cols_hosp,cols_excess,
                      cols_jhu,cols_survey,cols_v,cols_jhu_case,cols_hosp_new_res,
                      state_fips,epiweek,week_save,state_names,outputdir,outfile)
 
