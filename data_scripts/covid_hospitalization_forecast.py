@@ -757,8 +757,10 @@ def read_cdc_hosp(inputdir,epiweek_date,state_index,end_week):
                 week_cases[cols[0]][0][week_id]+=ttl
             else:
                 week_cases[cols[0]][state_id][week_id]=np.nan
-                
-            # same for week
+            
+            # same for flu hosp
+            ttl=0
+            flag_is_not_nan=False
             for c in flu_cols_to_check: 
                 if pd.isnull(row[c])==False:
                     ttl+=float(row[c])
