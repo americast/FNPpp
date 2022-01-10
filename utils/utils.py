@@ -19,6 +19,8 @@ def check_region_data(datapath,region,target_name,ew):
             return False
     elif target_name == 'death':
         y = df.loc[:,'death_jhu_incidence'].to_numpy()
+    elif target_name == 'flu hosp':
+        y = df.loc[:,'cdc_flu_hosp'].to_numpy()
     if y.sum()==0.:
         print('region ', region, ' is all zeros part!')
         return False
