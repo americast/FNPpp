@@ -1,9 +1,8 @@
-from utils.utils import check_region_data, std_interval_correction, multiplier_interval_correction
+from utils.utils import check_region_data, std_interval_correction, get_std_from_data, get_last_data_points, get_max_value
 import numpy as np
 import pandas as pd
 from datetime import date, timedelta
 from utils.vis import visualize_region
-import time
 from epiweeks import Week
 from scipy import stats
 from itertools import compress
@@ -25,25 +24,6 @@ regions_list = ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC',
             'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT',
             'VA', 'WA', 'WV', 'WI', 'WY', 'X']
 
-def get_max_value(datafile,region,target_name,ew):
-    df = pd.read_csv(datafile, header=0)
-    df = df[(df['region']==region)]
-    if target_name=='flu hosp':
-        val = df.loc[:,'cdc_flu_hosp'].max()
-    else:
-        print('error', region,target_name)
-        time.sleep(2)
-    return val
-
-def get_std_from_data(datafile,region,target_name,ew):
-    df = pd.read_csv(datafile, header=0)
-    df = df[(df['region']==region)]
-    if target_name=='flu hosp':
-        val = df.loc[:,'cdc_flu_hosp'].std()
-    else:
-        print('error', region,target_name)
-        time.sleep(2)
-    return val
 
 def get_predictions_from_pkl(nextk,res_path,region):
     """ reads from pkl, returns predictions for a region as a list"""
@@ -80,32 +60,36 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
     if not check_region_data(datafile,region,target_name,ew): # checks if region is there in our dataset
         return 0    
 
-    max_val = get_max_value(datafile,region,target_name,ew)
+    # max_val = get_max_value(datafile,region,target_name,ew)
     scale_data = get_std_from_data(datafile,region,target_name,ew)
+    last_data_vals = get_last_data_points(datafile,region,target_name,ew)
     print(region)
     point_preds = []
     lower_bounds_preds = []
     upper_bounds_preds = []
 
-    for nextk in range(1,k_ahead+1):
+    """ collect predictions """
+    medians = last_data_vals.ravel().tolist()
 
+    for nextk in range(1,k_ahead+1):
         predictions = get_predictions_from_pkl(nextk,res_path,region)
-        
         if predictions is None:
             continue
-
         pred_median = np.median(predictions)
-        quantile_cuts = [0.01, 0.025] + list(np.arange(0.05, 0.95+0.05, 0.05,dtype=float)) + [0.975, 0.99]
-        predictions = std_interval_correction(pred_median,scale_data)
-        # MULT = 5
-        # predictions = multiplier_interval_correction(predictions,MULT)
+        medians.append(pred_median)
 
-        # filter outliers
-        # z_scores = stats.zscore(predictions)
-        # abs_z_scores = np.abs(z_scores)
-        # fil = (abs_z_scores < LIMIT) & (predictions < max_val) # filter too big, TODO: too small & (predictions > min_val)
-        # fil = (abs_z_scores < LIMIT)
-        # predictions=list(compress(predictions, fil))
+    """ smooth predictions using last observations in time series """
+    window_width = 3
+    cumsum_vec = np.cumsum(np.insert(medians, 0, 0)) 
+    ma_vec = (cumsum_vec[window_width:] - cumsum_vec[:-window_width]) / window_width
+    medians = ma_vec[-4:]
+
+    """ scale data is tunable """
+    scale_data = scale_data/2
+
+    for nextk in range(1,k_ahead+1):
+        quantile_cuts = [0.01, 0.025] + list(np.arange(0.05, 0.95+0.05, 0.05,dtype=float)) + [0.975, 0.99]
+        predictions = std_interval_correction(medians[nextk-1],scale_data)
         quantiles = np.quantile(predictions, quantile_cuts)
         df = pd.read_csv(datafile, header=0)
         df = df[(df['region']==region)]
@@ -113,7 +97,6 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
         lower_bounds_preds.append(quantiles[1])
         upper_bounds_preds.append(quantiles[-2])
         point_preds.append(np.mean(predictions))
-
         
         suffix_=suffix
         if write_submission:
@@ -148,7 +131,10 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
 
     if visualize:
         print('==='+target_name+' '+region+'===')
-        visualize_region(target_name,region,point_preds,datafile,'inc',lower_bounds_preds.copy(),upper_bounds_preds.copy(),ew,suffix_,daily,'./figures-flu/')
+        figpath=f'./figures-flu/ew{ew}/processed/'
+        if not os.path.exists(figpath):
+            os.makedirs(figpath)
+        visualize_region(target_name,region,point_preds,datafile,'inc',lower_bounds_preds.copy(),upper_bounds_preds.copy(),ew,suffix_,daily,figpath)
 
     
 if __name__ == "__main__":

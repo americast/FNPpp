@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+import time
 device = torch.device("cpu")
 dtype = torch.float
 
@@ -93,3 +94,86 @@ def convert_fips_to_regions(fips):
     df = pd.read_csv('./data/us-state-ansi-fips.csv')
     regions = df.set_index('st').loc[fips,'stusps']
     return regions.to_list()
+
+
+def multiplier_interval_correction(predictions,MULT):
+    median = np.median(predictions)
+    new_predictions = []
+    for pred in predictions:
+        if pred < median:
+            deviation = median - pred
+            deviation = deviation*MULT
+            pred = median - deviation
+        if pred > median:
+            deviation = pred - median
+            deviation = deviation*MULT
+            pred = median + deviation
+        if pred < 0:
+            pred = 0
+        new_predictions.append(pred)
+    return new_predictions
+# predictions = multiplier_interval_correction(predictions,MULT)
+
+def std_interval_correction(median,scale_data):
+    # median = np.median(predictions)
+    new_predictions = median + np.random.randn(2000)*scale_data
+    return np.maximum(new_predictions, 0)
+
+def get_max_value(datafile,region,target_name,ew):
+    df = pd.read_csv(datafile, header=0)
+    df = df[(df['region']==region)]
+    if target_name=='death':
+        val = df.loc[:,'death_jhu_incidence'].max()
+    elif target_name=='hosp':
+        val = df.loc[:,'cdc_hospitalized'].max()
+        print('max val',val)
+    elif target_name=='flu hosp':
+        val = df.loc[:,'cdc_flu_hosp'].max()
+    else:
+        print('error', region,target_name)
+        time.sleep(2)
+    return val
+
+def get_std_from_data(datafile,region,target_name,ew):
+    df = pd.read_csv(datafile, header=0)
+    df = df[(df['region']==region)]
+    if target_name=='death':
+        val = df.loc[:,'death_jhu_incidence'].std()
+    elif target_name=='hosp':
+        val = df.loc[:,'cdc_hospitalized'].std()
+        print('max val',val)
+    elif target_name=='flu hosp':
+        val = df.loc[:,'cdc_flu_hosp'].std()
+    else:
+        print('error', region,target_name)
+        time.sleep(2)
+    return val
+
+def get_last_data_points(datafile,region,target_name,ew,k_last=4):
+    df = pd.read_csv(datafile, header=0)
+    df = df[(df['region']==region)]
+    if target_name=='death':
+        val = df.loc[:,'death_jhu_incidence'].to_numpy()[-k_last:]
+    elif target_name=='hosp':
+        val = df.loc[:,'cdc_hospitalized'].to_numpy()[-k_last:]
+    elif target_name=='flu hosp':
+        val = df.loc[:,'cdc_flu_hosp'].to_numpy()[-k_last:]
+    else:
+        print('error', region,target_name)
+        time.sleep(2)
+    return val
+
+# get cumulative
+def get_cumsum_region(datafile,region,target_name,ew):
+    df = pd.read_csv(datafile, header=0)
+    df = df[(df['region']==region)]
+    if target_name=='death':
+        cum = df.loc[:,'death_jhu_incidence'].sum()
+    elif target_name=='hosp':
+        cum = None
+        # raise Exception('not implemented')
+        # cum = df.loc[:,'hospitalizedIncrease'].sum()
+    else:
+        print('error', region,target_name)
+        time.sleep(2)
+    return cum

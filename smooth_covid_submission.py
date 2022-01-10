@@ -1,68 +1,15 @@
-from utils.utils import check_region_data
+from utils.utils import check_region_data, std_interval_correction, get_std_from_data, get_last_data_points, get_max_value, get_cumsum_region
 import numpy as np
 import pandas as pd
 from datetime import date, timedelta
 from utils.vis import visualize_region
-import time
 from epiweeks import Week
 from scipy import stats
 from itertools import compress
 import pdb
 import pickle
 import os
-# ew202141 remove
-death_remove = ['TX','AZ','CT','CO']
-death_replace_4th_with_3th = ['X','AL','AR','GA','ID','IN','LA','NV','OR','SC','TX','WV','WA']
-hosp_remove = ['AR','LA']
-# ew202142 remove
-death_remove = ['X','NY']
-death_replace_4th_with_3th = ['MI','MN','AZ','CT','ID','NJ','NM','NY','OH','OK','PA','VT']
-hosp_remove = ['X','FL','MO','MS','NV','OK','AL','KY','GA','IA','ID','IL','IN','NC','SC','TN','TX','WA','WI']
-# ew202143 remove
-death_remove = ['X','WA']
-hosp_remove = ["X","FL","LA","MO","MS","OK","SC","TX","AL","AR"]
-death_replace_4th_with_3th = []
-# ew202144 remove
-death_remove = ['NY','IL']
-hosp_remove = ['X','OR','OK','SC','FL','GA','NV','NC','MS','MO','LA','IN','KY','AL','NC','AR','TX','VA']
-death_replace_4th_with_3th = ['NH','NM']
-# ew202145 remove
-death_remove = ['NY','OH','PA']
-hosp_remove = ['X','FL','KY','LA','SC','AL','AR','ID','MO','NC','OR','PA','SC']
-death_replace_4th_with_3th = ['NC']
-# ew202146 remove
-death_remove = []
-hosp_remove = ['LA']
-death_replace_4th_with_3th = ['SD']
-# ew202147 remove
-death_remove = ['MA','NE','NY']  # track 'IL','IN'
-hosp_remove = ['AL','FL','LA','MS']
-death_replace_4th_with_3th = []
-# ew202148 remove
-death_remove = ['OH'] #NJ
-hosp_remove = ['X','AL','FL','GA','LA','MI','MS','SC','TX','CA','ID','KY'] #
-death_replace_4th_with_3th = []
-# ew202149 remove
-death_remove = ['X','CT','DC','IL','MA','MI','MO','NJ','NY','OH','ME']
-hosp_remove = []
-death_replace_4th_with_3th = ['GA','IL','ME','NJ','NY','RI','VT']
-# ew202150 remove
-death_remove = ['CO','NJ']
-hosp_remove = [] # all removed 
-death_replace_4th_with_3th = []
-increase_death_interval = ['MI','MN','NM','ME','NH','WI','RI']
-# ew202151 remove
-death_remove = ['X','WI','VA','OH','GA','FL','RI','AZ','NJ','NY','PA']#,'IA','SC','WI','OH','CT','WI']
-hosp_remove = []  # all removed 
-death_replace_4th_with_3th = []
-increase_death_interval = ['DC','MI','MN','NM','ME','NH','DE','IL','LA']
-# ew202152 remove
-death_remove = ['AK','CA','GA','DC','OR','MN','AL','AR','AZ','CO','VA','IA','ND','KS','KY','IN','IA','TX','WY','SD','TN','NE','MI','MS','VT','OH','MT','UT','MD']
-# to fix: 'X',NJ,NY,WA
-hosp_remove = []  # all removed 
-death_replace_4th_with_3th = ['ND','NV','MO','X','CT','NJ']
-increase_death_interval_high = ['CO','FL','GA','IA','IL','MO','MS','NC','OH','OR','PA','RI','UT','WA','LA','DE','NH','SC']
-increase_death_interval_low = ['X','NJ','NY']
+import time
 # ew202201 remove
 death_remove = []
 hosp_remove = [] 
@@ -76,36 +23,6 @@ regions_list = ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC',
             'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK',
             'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT',
             'VA', 'WA', 'WV', 'WI', 'WY', 'X']
-
-
-
-# get cumulative
-def get_cumsum_region(datafile,region,target_name,ew):
-    df = pd.read_csv(datafile, header=0)
-    df = df[(df['region']==region)]
-    if target_name=='death':
-        cum = df.loc[:,'death_jhu_incidence'].sum()
-    elif target_name=='hosp':
-        cum = None
-        # raise Exception('not implemented')
-        # cum = df.loc[:,'hospitalizedIncrease'].sum()
-    else:
-        print('error', region,target_name)
-        time.sleep(2)
-    return cum
-
-def get_max_value(datafile,region,target_name,ew):
-    df = pd.read_csv(datafile, header=0)
-    df = df[(df['region']==region)]
-    if target_name=='death':
-        val = df.loc[:,'death_jhu_incidence'].max()
-    elif target_name=='hosp':
-        val = df.loc[:,'cdc_hospitalized'].max()
-        print('max val',val)
-    else:
-        print('error', region,target_name)
-        time.sleep(2)
-    return val
 
 def get_predictions_from_pkl(next,res_path,region):
     """ reads from pkl, returns predictions for a region as a list"""
@@ -151,64 +68,36 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
         return 0    
 
     prev_cum = get_cumsum_region(datafile,region,target_name,ew)
-    max_val = get_max_value(datafile,region,target_name,ew)
-    print(region,prev_cum)
+     # max_val = get_max_value(datafile,region,target_name,ew)
+    scale_data = get_std_from_data(datafile,region,target_name,ew)
+    last_data_vals = get_last_data_points(datafile,region,target_name,ew)
+    print(region)
     point_preds = []
     lower_bounds_preds = []
     upper_bounds_preds = []
-    for next in range(1,k_ahead+1):
 
-        predictions = get_predictions_from_pkl(next,res_path,region)
-        
-        if target_name=='death':
-            # MULT = 1.2
-            MULT = 2
-            if region in increase_death_interval_high:
-                MULT = 6
-            elif region in increase_death_interval_low:
-                MULT = 4
-            LIMIT=3 # for outliers
-            if next==4:
-                if region in death_replace_4th_with_3th:
-                    predictions = get_predictions_from_pkl(3,res_path,region)
-                    # subtract one (just to make them different)
-                    predictions = [pred*1.2 for pred in predictions]
-        elif target_name=='hosp':
-            # MULT = 3.5
-            # MULT = 3  # changed to 2 on 11/15
-            # update on 11/29
-            # if next < 13:
-            #     MULT = 3.5
-            # else:
-            MULT = 1
-            LIMIT= 1.3 # for outliers
+    """ collect predictions """
+    medians = last_data_vals.ravel().tolist()
 
+    for nextk in range(1,k_ahead+1):
+        predictions = get_predictions_from_pkl(nextk,res_path,region)
         if predictions is None:
             continue
+        pred_median = np.median(predictions)
+        medians.append(pred_median)
+
+    """ smooth predictions using last observations in time series """
+    window_width = 3
+    cumsum_vec = np.cumsum(np.insert(medians, 0, 0)) 
+    ma_vec = (cumsum_vec[window_width:] - cumsum_vec[:-window_width]) / window_width
+    medians = ma_vec[-4:]
+
+    """ scale data is tunable """
+    scale_data = scale_data/2
+
+    for next in range(1,k_ahead+1):
         quantile_cuts = [0.01, 0.025] + list(np.arange(0.05, 0.95+0.05, 0.05,dtype=float)) + [0.975, 0.99]
-        median = np.median(predictions)
-        new_predictions = []
-        for pred in predictions:
-            if pred < median:
-                deviation = median - pred
-                deviation = deviation*MULT
-                pred = median - deviation
-            if pred > median:
-                deviation = pred - median
-                deviation = deviation*MULT
-                pred = median + deviation
-            if pred < 0:
-                pred = 0
-            new_predictions.append(pred)
-        predictions = new_predictions
-
-        # filter outliers
-        z_scores = stats.zscore(predictions)
-        abs_z_scores = np.abs(z_scores)
-        # fil = (abs_z_scores < LIMIT) & (predictions < max_val) # filter too big, TODO: too small & (predictions > min_val)
-        fil = (abs_z_scores < LIMIT)
-        predictions=list(compress(predictions, fil))
-
+        predictions = std_interval_correction(medians[next-1],scale_data)
         quantiles = np.quantile(predictions, quantile_cuts)
         df = pd.read_csv(datafile, header=0)
         df = df[(df['region']==region)]
@@ -249,7 +138,7 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
                 for q_c, q_v in zip(quantile_cuts, quantiles):
                     f.write(str(datex)+','+str(next)+' wk ahead inc '+target_name+','+str(target_end_date)+','+location_fips+','+'quantile'+','+"{:.4f}".format(q_c)+','+"{:.4f}".format(q_v)+'\n')
                 # cumulative here
-                current_cum = prev_cum 
+                current_cum = prev_cum
                 # print('region',current_cum)
                 f.write(str(datex)+','+str(next)+' wk ahead cum '+target_name+','+str(target_end_date)+','+location_fips+','+'point'+','+'NA'+','+"{:.4f}".format(np.mean(predictions)+current_cum)+'\n')
                 for q_c, q_v in zip(quantile_cuts, quantiles):
@@ -278,7 +167,7 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
                             f.write(str(datex)+','+str((next-1)*7+i)+' day ahead inc '+target_name+','+str(target_end_date)+','+location_fips+','+'quantile'+','+"{:.4f}".format(q_c)+','+"{:.4f}".format(q_v)+'\n')
 
     if visualize:
-        figpath=f'./figures/ew{ew}/raw/'
+        figpath=f'./figures/ew{ew}/processed/'
         if not os.path.exists(figpath):
             os.makedirs(figpath)
         if target_name=='death':
