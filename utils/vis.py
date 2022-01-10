@@ -8,7 +8,7 @@ from epiweeks import Year, Week
 import os
 
 # set the start week for the visualization
-ew_vis_start='202105'
+ew_vis_start='202107'
 
 def visualize_region(target_name,region,predictions,datafile,opt,_min=None,_max=None,ew=19,suffix='',daily=False,fig_path='./figures/',show_rmse=False):
     """
@@ -66,6 +66,9 @@ def visualize_region(target_name,region,predictions,datafile,opt,_min=None,_max=
         # inc = df.loc[:,'deathIncrease'].to_numpy()
         inc = df.loc[:,'death_jhu_incidence'].to_numpy()
         title_txt = 'Mortality'
+    elif target_name == 'flu hosp':
+        inc = df.loc[:,'cdc_flu_hosp'].to_numpy()
+        title_txt = 'Flu Hosp'
 
     if opt=='inc':
         y=inc
@@ -114,18 +117,18 @@ def visualize_region(target_name,region,predictions,datafile,opt,_min=None,_max=
 
     if daily:
         plt.plot(days,y,'b',label='Ground truth data from JHU',linestyle='-')
-        plt.plot([days[-1]]+pred_days,[y[-1]]+predictions,linestyle='-', marker='o', markersize=1, linewidth=1, color='b',label='Associated predictions')
+        plt.plot([days[-1]]+pred_days,[y[-1]]+predictions,linestyle='-', marker='o', markersize=1, linewidth=1, color='r',label='Associated predictions')
     else:
         epiweeks = [str(e)[-2:] for e in epiweeks]
         pred_weeks = [str(e)[-2:] for e in pred_weeks]
         ## Plot ground truth data first
         plt.plot(epiweeks,y,'b',label='Ground truth data from JHU',linestyle='-')
         ## The predictions starts from the last week of ground truth
-        plt.plot([epiweeks[-1]]+pred_weeks,[y[-1]]+predictions,linestyle='--', marker='o', color='b',label='Associated predictions')
+        plt.plot([epiweeks[-1]]+pred_weeks,[y[-1]]+predictions,linestyle='--', marker='o', color='r',label='Associated predictions')
     ## Plot the overlap data
     
     if overlap==True:
-        plt.plot(red_x,red_y,linestyle='-', color='r', marker= "^",label=' Associated Ground Truth to Compare')
+        plt.plot(red_x,red_y,linestyle='-', color='m', marker= "^",label=' Associated Ground Truth to Compare')
 
         if show_rmse:
             ##Plot RMSE 

@@ -47,9 +47,28 @@ death_remove = ['X','CT','DC','IL','MA','MI','MO','NJ','NY','OH','ME']
 hosp_remove = []
 death_replace_4th_with_3th = ['GA','IL','ME','NJ','NY','RI','VT']
 # ew202150 remove
-death_remove = []
-hosp_remove = []
+death_remove = ['CO','NJ']
+hosp_remove = [] # all removed 
 death_replace_4th_with_3th = []
+increase_death_interval = ['MI','MN','NM','ME','NH','WI','RI']
+# ew202151 remove
+death_remove = ['X','WI','VA','OH','GA','FL','RI','AZ','NJ','NY','PA']#,'IA','SC','WI','OH','CT','WI']
+hosp_remove = []  # all removed 
+death_replace_4th_with_3th = []
+increase_death_interval = ['DC','MI','MN','NM','ME','NH','DE','IL','LA']
+# ew202152 remove
+death_remove = ['AK','CA','GA','DC','OR','MN','AL','AR','AZ','CO','VA','IA','ND','KS','KY','IN','IA','TX','WY','SD','TN','NE','MI','MS','VT','OH','MT','UT','MD']
+# to fix: 'X',NJ,NY,WA
+hosp_remove = []  # all removed 
+death_replace_4th_with_3th = ['ND','NV','MO','X','CT','NJ']
+increase_death_interval_high = ['CO','FL','GA','IA','IL','MO','MS','NC','OH','OR','PA','RI','UT','WA','LA','DE','NH','SC']
+increase_death_interval_low = ['X','NJ','NY']
+# ew202201 remove
+death_remove = []
+hosp_remove = [] 
+death_replace_4th_with_3th = []
+increase_death_interval_high = []
+increase_death_interval_low = []
 
 regions_list = ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC',
             'FL', 'GA', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA',
@@ -94,8 +113,8 @@ def get_predictions_from_pkl(next,res_path,region):
     if(daily):
         path=res_path+ 'deploy_week_' + str(week_current) +'_' + str(next) + '_predictions.pkl'
     else:
-        # path=res_path+'mort_deploy_week_' + str(week_current) +'_' + str(next) + '_predictions.pkl' # normal
-        path=res_path+'mort_deploy_week_' + str(week_current) +'_' + str(next) + '_predictions_refined.pkl'# b2f
+        path=res_path+'mort_deploy_week_' + str(week_current) +'_' + str(next) + '_predictions.pkl' # normal
+        # path=res_path+'mort_deploy_week_' + str(week_current) +'_' + str(next) + '_predictions_refined.pkl'# b2f
 
     if not os.path.exists(path):
         print(path)
@@ -141,12 +160,16 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
         if target_name=='death':
             # MULT = 1.2
             MULT = 2
+            if region in increase_death_interval_high:
+                MULT = 6
+            elif region in increase_death_interval_low:
+                MULT = 4
             LIMIT=3 # for outliers
             if next==4:
                 if region in death_replace_4th_with_3th:
                     predictions = get_predictions_from_pkl(3,res_path,region)
                     # subtract one (just to make them different)
-                    predictions = [pred-10 for pred in predictions]
+                    predictions = [pred*1.2 for pred in predictions]
         elif target_name=='hosp':
             # MULT = 3.5
             # MULT = 3  # changed to 2 on 11/15
@@ -265,6 +288,8 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
 if __name__ == "__main__":
     
     PLOT=True
+    # WRITE_SUBMISSION_FILE=False
+    WRITE_SUBMISSION_FILE=True
     ew= int(str(Week.thisweek(system="CDC") - 1)[-2:])
     print(ew)
     ew=Week.fromstring('2021'+str(ew))
@@ -281,7 +306,7 @@ if __name__ == "__main__":
     print(suffix)
 
     for region in temp_regions:
-        parse(region,ew,target_name,suffix,daily,True,PLOT)
+        parse(region,ew,target_name,suffix,daily,WRITE_SUBMISSION_FILE,PLOT)
     target_name='hosp'
     suffix='M1_daily_5_vEW'+str(ew)
     temp_regions = regions
