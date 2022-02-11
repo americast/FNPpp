@@ -28,8 +28,7 @@ def get_datasets():
     # get google global mobility
     url = "https://www.gstatic.com/covid19/mobility/Global_Mobility_Report.csv"
     response = requests.get(url).content
-    if os.path.exists("./Global_Mobility_Report.csv"):
-        os.remove("Global_Mobility_Report.csv")
+    os.remove("Global_Mobility_Report.csv")
     mobility_csv = open("Global_Mobility_Report.csv", 'wb')
     mobility_csv.write(response)
     mobility_csv.close()
@@ -40,8 +39,7 @@ def get_datasets():
     # get jhu casecount data
     url = "https://github.com/CSSEGISandData/COVID-19/raw/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv"
     response = requests.get(url).content
-    if os.path.exists("./time_series_covid19_confirmed_US.csv"):
-        os.remove("time_series_covid19_confirmed_US.csv")
+    os.remove("time_series_covid19_confirmed_US.csv")
     jhu_confirmed_csv = open("time_series_covid19_confirmed_US.csv", 'wb')
     jhu_confirmed_csv.write(response)
     jhu_confirmed_csv.close()
@@ -50,8 +48,7 @@ def get_datasets():
     # get jhu deaths data
     url = "https://github.com/CSSEGISandData/COVID-19/raw/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_US.csv"
     response = requests.get(url).content
-    if os.path.exists("./time_series_covid19_deaths_US.csv"):
-        os.remove("time_series_covid19_deaths_US.csv")
+    os.remove("time_series_covid19_deaths_US.csv")
     jhu_deaths_csv = open("time_series_covid19_deaths_US.csv", 'wb')
     jhu_deaths_csv.write(response)
     jhu_deaths_csv.close()
@@ -60,8 +57,7 @@ def get_datasets():
     # get pcr test data
     url = "https://healthdata.gov//api/views/j8mb-icvb/rows.csv?accessType=DOWNLOAD"
     response = requests.get(url).content
-    if os.path.exists("./COVID-19_PCR_Testing_Time_Series.csv"):
-        os.remove("COVID-19_PCR_Testing_Time_Series.csv")
+    os.remove("COVID-19_PCR_Testing_Time_Series.csv")
     pcr_test_csv = open("COVID-19_PCR_Testing_Time_Series.csv", 'wb')
     pcr_test_csv.write(response)
     pcr_test_csv.close()
@@ -70,8 +66,7 @@ def get_datasets():
     # get excess death
     url = "https://data.cdc.gov/api/views/xkkf-xrst/rows.csv?accessType=DOWNLOAD&bom=true&format=true%20target="
     response = requests.get(url).content
-    if os.path.exists("./Excess_Deaths_COVID.csv"):
-        os.remove("Excess_Deaths_COVID-19.csv")
+    os.remove("Excess_Deaths_COVID-19.csv")
     excess_death_csv = open("Excess_Deaths_COVID-19.csv", 'wb')
     excess_death_csv.write(response)
     excess_death_csv.close()
@@ -80,8 +75,7 @@ def get_datasets():
     # get vaccine data
     url = "https://github.com/govex/COVID-19/raw/master/data_tables/vaccine_data/us_data/time_series/vaccine_data_us_timeline.csv"
     response = requests.get(url).content
-    if os.path.exists("./vaccine_data_us_state_timeline.csv"):
-        os.remove("vaccine_data_us_state_timeline.csv")
+    os.remove("vaccine_data_us_state_timeline.csv")
     vaccine_csv = open("vaccine_data_us_state_timeline.csv", 'wb')
     vaccine_csv.write(response)
     vaccine_csv.close()
