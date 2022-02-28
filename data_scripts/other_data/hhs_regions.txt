@@ -1,0 +1,10 @@
+1,Connecticut,Maine,Massachusetts,New Hampshire,Rhode Island,Vermont
+2,New Jersey,New York,Puerto Rico,Virgin Islands
+3,Delaware,District of Columbia,Maryland,Pennsylvania,Virginia,West Virginia
+4,Alabama,Florida,Georgia,Kentucky,Mississippi,North Carolina,South Carolina,Tennessee
+5,Illinois,Indiana,Michigan,Minnesota,Ohio,Wisconsin
+6,Arkansas,Louisiana,New Mexico,Oklahoma,Texas
+7,Iowa,Kansas,Missouri,Nebraska
+8,Colorado,Montana,North Dakota,South Dakota,Utah,Wyoming
+9,Arizona,California,Hawaii,Nevada,American Samoa,Commonwealth of the Northern Mariana Islands,Federated States of Micronesia,Guam,Marshall Islands,Republic of Palau
+10,Alaska,Idaho,Oregon,Washington
