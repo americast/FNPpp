@@ -33,7 +33,8 @@ https://www.cdc.gov/coronavirus/2019-ncov/covid-data/covidview/10092020/outpatie
 # In[2]:
 
 
-# get_ipython().run_line_magic('matplotlib', 'inline')
+#import all necessary libraries
+get_ipython().run_line_magic('matplotlib', 'inline')
 import requests
 import pandas as pd
 import numpy as np
@@ -45,11 +46,13 @@ from datetime import date
 
 from epiweeks import Week, Year
 from delphi_epidata import Epidata
+from dateutil.relativedelta import relativedelta
 
 
 # In[3]:
 
 
+# Writes the output file for each column
 def unit_test(data_dic,cols,epiweek_date,state_index,outfile):
     state_names=list(state_index.keys())
     all_cols=['date','region']+cols
@@ -70,31 +73,313 @@ def unit_test(data_dic,cols,epiweek_date,state_index,outfile):
 # In[4]:
 
 
-def read_survey_epidata(col_name,epidata,state_index,state_names,epiweek_date):
-    week_cases=np.zeros((len(state_names),len(epiweek_date)))
+# Reads the delphi data and processes the data
+def read_survey_epidata(col_name,epidata,state_index,state_names,epiweek_date):   
+    week_cases=np.full((len(state_names),len(epiweek_date)), np.nan)
     total_sample=0
     for ix in range(len(epidata)):
         row=epidata[ix]
         name=row['geo_value'].upper()
         w_idx=find_week_index(epiweek_date,str(row['time_value']))
-        if name in state_names and w_idx!=-1:
+        if name == 'US' and w_idx !=-1: 
+            if np.isnan(week_cases[0][w_idx]): 
+                week_cases[0][w_idx] = 0
+            week_cases[0][w_idx] += row['value']/7
+        elif name in state_names and w_idx!=-1:
             state_id=state_index[name]
-            week_cases[state_id][w_idx]+=row['value']
-            week_cases[0][w_idx]+=(row['value']/100)*row['sample_size']
-            total_sample+=row['sample_size']
-    
-    #national
-    week_cases[0]=week_cases[0]*100/total_sample
-    
+            if np.isnan(week_cases[state_id][w_idx]):
+                week_cases[state_id][w_idx] = 0
+            week_cases[state_id][w_idx]+=row['value']/7
     return week_cases
 
 
-# In[29]:
+# In[5]:
 
 
+def read_delphi_vaccine_test_two(state_index,epiweek_date,start_week,end_week):
+    #'''
+    # The 
+    vacc11=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','state',[start_week, Epidata.range(start_week, 20210301)],'*')
+    vacc21=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','state',[start_week, Epidata.range(start_week, 20210301)],'*')
+    vacc31=Epidata.covidcast('fb-survey','smoothed_wwearing_mask_7d','day','state',[20210208, Epidata.range(20210208, 20210301)],'*')
+    ##vacc41=Epidata.covidcast('fb-survey','smoothed_wtravel_outside_state_5d','day','state',[start_week, Epidata.range(start_week, 20210301)],'*')
+    ##vacc51=Epidata.covidcast('fb-survey','smoothed_wspent_time_1d','day','state',[start_week, Epidata.range(start_week, 20210301)],'*')
+    
+    vacc11_us=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','nation',[start_week, Epidata.range(start_week, 20210301)],'*')
+    vacc21_us=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','nation',[start_week, Epidata.range(start_week, 20210301)],'*')
+    vacc31_us=Epidata.covidcast('fb-survey','smoothed_wwearing_mask_7d','day','nation',[20210208, Epidata.range(20210208, 20210301)],'*')
+    ##vacc41_us=Epidata.covidcast('fb-survey','smoothed_wtravel_outside_state_5d','day','nation',[start_week, Epidata.range(start_week, 20210301)],'*')
+    ##vacc51_us=Epidata.covidcast('fb-survey','smoothed_wspent_time_1d','day','nation',[start_week, Epidata.range(start_week, 20210301)],'*')
+    
+    vacc12=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','state',[20210301, Epidata.range(20210301, 20210501)],'*')
+    vacc13=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','state',[20210501, Epidata.range(20210501, 20210701)],'*')
+    vacc14=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','state',[20210701, Epidata.range(20210701, 20210901)],'*')
+    vacc15=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','state',[20210901, Epidata.range(20210901, 20211101)],'*')
+    vacc16=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','state',[20211101, Epidata.range(20211101, 20220101)],'*')
+    vacc17=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','state',[20220101, Epidata.range(20220101, 20220301)],'*')
+    vacc18=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','state',[20220301, Epidata.range(20220301, end_week)],'*')
+    
+    vacc12_us=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','nation',[20210301, Epidata.range(20210301, 20210501)],'*')
+    vacc13_us=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','nation',[20210501, Epidata.range(20210501, 20210701)],'*')
+    vacc14_us=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','nation',[20210701, Epidata.range(20210701, 20210901)],'*')
+    vacc15_us=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','nation',[20210901, Epidata.range(20210901, 20211101)],'*')
+    vacc16_us=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','nation',[20211101, Epidata.range(20211101, 20220101)],'*')
+    vacc17_us=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','nation',[20220101, Epidata.range(20220101, 20220301)],'*')
+    vacc18_us=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','nation',[20220301, Epidata.range(20220101, end_week)],'*')
+    
+    
+    vacc22=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','state',[20210301, Epidata.range(20210301, 20210501)],'*')
+    vacc23=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','state',[20210501, Epidata.range(20210501, 20210701)],'*')
+    vacc24=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','state',[20210701, Epidata.range(20210701, 20210901)],'*')
+    vacc25=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','state',[20210901, Epidata.range(20210901, 20211101)],'*')
+    vacc26=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','state',[20211101, Epidata.range(20211101, 20220101)],'*')
+    vacc27=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','state',[20220101, Epidata.range(20220101, 20220301)],'*')
+    vacc28=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','state',[20220301, Epidata.range(20220301, end_week)],'*')
+    
+    vacc22_us=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','nation',[20210301, Epidata.range(20210301, 20210501)],'*')
+    vacc23_us=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','nation',[20210501, Epidata.range(20210501, 20210701)],'*')
+    vacc24_us=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','nation',[20210701, Epidata.range(20210701, 20210901)],'*')
+    vacc25_us=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','nation',[20210901, Epidata.range(20210901, 20211101)],'*')
+    vacc26_us=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','nation',[20211101, Epidata.range(20211101, 20220101)],'*')
+    vacc27_us=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','nation',[20220101, Epidata.range(20220101, 20220301)],'*')
+    vacc28_us=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','nation',[20220301, Epidata.range(20220301, end_week)],'*')
+    
+    
+    vacc32=Epidata.covidcast('fb-survey','smoothed_wwearing_mask_7d','day','state',[20210301, Epidata.range(20210301, 20210501)],'*')
+    vacc33=Epidata.covidcast('fb-survey','smoothed_wwearing_mask_7d','day','state',[20210501, Epidata.range(20210501, 20210701)],'*')
+    vacc34=Epidata.covidcast('fb-survey','smoothed_wwearing_mask_7d','day','state',[20210701, Epidata.range(20210701, 20210901)],'*')
+    vacc35=Epidata.covidcast('fb-survey','smoothed_wwearing_mask_7d','day','state',[20210901, Epidata.range(20210901, 20211101)],'*')
+    vacc36=Epidata.covidcast('fb-survey','smoothed_wwearing_mask_7d','day','state',[20211101, Epidata.range(20211101, 20220101)],'*')
+    vacc37=Epidata.covidcast('fb-survey','smoothed_wwearing_mask_7d','day','state',[20220101, Epidata.range(20220101, 20220301)],'*')
+    vacc38=Epidata.covidcast('fb-survey','smoothed_wwearing_mask_7d','day','state',[20220301, Epidata.range(20220301, end_week)],'*')
+    
+    vacc32_us=Epidata.covidcast('fb-survey','smoothed_wwearing_mask_7d','day','nation',[20210301, Epidata.range(20210301, 20210501)],'*')
+    vacc33_us=Epidata.covidcast('fb-survey','smoothed_wwearing_mask_7d','day','nation',[20210501, Epidata.range(20210501, 20210701)],'*')
+    vacc34_us=Epidata.covidcast('fb-survey','smoothed_wwearing_mask_7d','day','nation',[20210701, Epidata.range(20210701, 20210901)],'*')
+    vacc35_us=Epidata.covidcast('fb-survey','smoothed_wwearing_mask_7d','day','nation',[20210901, Epidata.range(20210901, 20211101)],'*')
+    vacc36_us=Epidata.covidcast('fb-survey','smoothed_wwearing_mask_7d','day','nation',[20211101, Epidata.range(20211101, 20220101)],'*')
+    vacc37_us=Epidata.covidcast('fb-survey','smoothed_wwearing_mask_7d','day','nation',[20220101, Epidata.range(20220101, 20220301)],'*')
+    vacc38_us=Epidata.covidcast('fb-survey','smoothed_wwearing_mask_7d','day','nation',[20220301, Epidata.range(20220301, end_week)],'*')
+    
+    
+    vacc41=Epidata.covidcast('fb-survey','smoothed_wtravel_outside_state_7d','day','state',[20210302, Epidata.range(20210302, 20210501)],'*')
+    vacc42=Epidata.covidcast('fb-survey','smoothed_wtravel_outside_state_7d','day','state',[20210501, Epidata.range(20210501, 20210701)],'*')
+    vacc43=Epidata.covidcast('fb-survey','smoothed_wtravel_outside_state_7d','day','state',[20210701, Epidata.range(20210701, 20210901)],'*')
+    vacc44=Epidata.covidcast('fb-survey','smoothed_wtravel_outside_state_7d','day','state',[20210901, Epidata.range(20210901, 20211101)],'*')
+    vacc45=Epidata.covidcast('fb-survey','smoothed_wtravel_outside_state_7d','day','state',[20211101, Epidata.range(20211101, 20220101)],'*')
+    vacc46=Epidata.covidcast('fb-survey','smoothed_wtravel_outside_state_7d','day','state',[20220101, Epidata.range(20220101, 20220301)],'*')
+    #vacc47=Epidata.covidcast('fb-survey','smoothed_wtravel_outside_state_7d','day','state',[20220301, Epidata.range(20220301, end_week)],'*')
+    
+    vacc41_us=Epidata.covidcast('fb-survey','smoothed_wtravel_outside_state_7d','day','nation',[20210302, Epidata.range(20210302, 20210501)],'*')
+    vacc42_us=Epidata.covidcast('fb-survey','smoothed_wtravel_outside_state_7d','day','nation',[20210501, Epidata.range(20210501, 20210701)],'*')
+    vacc43_us=Epidata.covidcast('fb-survey','smoothed_wtravel_outside_state_7d','day','nation',[20210701, Epidata.range(20210701, 20210901)],'*')
+    vacc44_us=Epidata.covidcast('fb-survey','smoothed_wtravel_outside_state_7d','day','nation',[20210901, Epidata.range(20210901, 20211101)],'*')
+    vacc45_us=Epidata.covidcast('fb-survey','smoothed_wtravel_outside_state_7d','day','nation',[20211101, Epidata.range(20211101, 20220101)],'*')
+    vacc46_us=Epidata.covidcast('fb-survey','smoothed_wtravel_outside_state_7d','day','nation',[20220101, Epidata.range(20220101, 20220301)],'*')
+    #vacc47_us=Epidata.covidcast('fb-survey','smoothed_wtravel_outside_state_7d','day','nation',[20220301, Epidata.range(20220301, end_week)],'*')
+    
+    vacc51=Epidata.covidcast('fb-survey','smoothed_wspent_time_indoors_1d','day','state',[20210302, Epidata.range(20210302, 20210501)],'*')
+    vacc52=Epidata.covidcast('fb-survey','smoothed_wspent_time_indoors_1d','day','state',[20210501, Epidata.range(20210501, 20210701)],'*')
+    vacc53=Epidata.covidcast('fb-survey','smoothed_wspent_time_indoors_1d','day','state',[20210701, Epidata.range(20210701, 20210901)],'*')
+    vacc54=Epidata.covidcast('fb-survey','smoothed_wspent_time_indoors_1d','day','state',[20210901, Epidata.range(20210901, 20211101)],'*')
+    vacc55=Epidata.covidcast('fb-survey','smoothed_wspent_time_indoors_1d','day','state',[20211101, Epidata.range(20211101, 20220101)],'*')
+    vacc56=Epidata.covidcast('fb-survey','smoothed_wspent_time_indoors_1d','day','state',[20220101, Epidata.range(20220101, 20220301)],'*')
+    vacc57=Epidata.covidcast('fb-survey','smoothed_wspent_time_indoors_1d','day','state',[20220301, Epidata.range(20220301, end_week)],'*')
+    
+    vacc51_us=Epidata.covidcast('fb-survey','smoothed_wspent_time_indoors_1d','day','nation',[20210302, Epidata.range(20210302, 20210501)],'*')
+    vacc52_us=Epidata.covidcast('fb-survey','smoothed_wspent_time_indoors_1d','day','nation',[20210501, Epidata.range(20210501, 20210701)],'*')
+    vacc53_us=Epidata.covidcast('fb-survey','smoothed_wspent_time_indoors_1d','day','nation',[20210701, Epidata.range(20210701, 20210901)],'*')
+    vacc54_us=Epidata.covidcast('fb-survey','smoothed_wspent_time_indoors_1d','day','nation',[20210901, Epidata.range(20210901, 20211101)],'*')
+    vacc55_us=Epidata.covidcast('fb-survey','smoothed_wspent_time_indoors_1d','day','nation',[20211101, Epidata.range(20211101, 20220101)],'*')
+    vacc56_us=Epidata.covidcast('fb-survey','smoothed_wspent_time_indoors_1d','day','nation',[20220101, Epidata.range(20220101, 20220301)],'*')
+    vacc57_us=Epidata.covidcast('fb-survey','smoothed_wspent_time_indoors_1d','day','nation',[20220301, Epidata.range(20220301, end_week)],'*')
+    
+    #vacc32=Epidata.covidcast('fb-survey','smoothed_wearing_mask','day','state',[20210301, Epidata.range(20210301, end_week)],'*')
+    ##vacc42=Epidata.covidcast('fb-survey','smoothed_wtravel_outside_state_5d','day','state',[20210301, Epidata.range(20210301, end_week)],'*')
+    ##vacc52=Epidata.covidcast('fb-survey','smoothed_wspent_time_1d','day','state',[20210301, Epidata.range(20210301, end_week)],'*')
+    
+    #vacc42_us=Epidata.covidcast('fb-survey','smoothed_wtravel_outside_state_5d','day','nation',[20210301, Epidata.range(20210301, end_week)],'*')
+    #vacc52_us=Epidata.covidcast('fb-survey','smoothed_wspent_time_1d','day','nation',[20210301, Epidata.range(20210301, end_week)],'*')
+    
+    vacc1=vacc11['epidata']+vacc12['epidata']+vacc13['epidata']+vacc14['epidata']+vacc15['epidata']+vacc16['epidata']+vacc17['epidata']+vacc18['epidata']
+    vacc2=vacc21['epidata']+vacc22['epidata']+vacc23['epidata']+vacc24['epidata']+vacc25['epidata']+vacc26['epidata']+vacc27['epidata']+vacc28['epidata']
+    vacc3=vacc31['epidata']+vacc32['epidata']+vacc33['epidata']+vacc34['epidata']+vacc35['epidata']+vacc36['epidata']+vacc37['epidata']+vacc38['epidata']
+    vacc4=vacc41['epidata']+vacc42['epidata']+vacc43['epidata']+vacc44['epidata']+vacc45['epidata']+vacc46['epidata']#+vacc47['epidata']
+    vacc5=vacc51['epidata']+vacc52['epidata']+vacc53['epidata']+vacc54['epidata']+vacc55['epidata']+vacc56['epidata']+vacc57['epidata']
+    
+    vacc1_us=vacc11_us['epidata']+vacc12_us['epidata']+vacc13_us['epidata']+vacc14_us['epidata']+vacc15_us['epidata']+vacc16_us['epidata']+vacc17_us['epidata']+vacc18_us['epidata']
+    vacc2_us=vacc21_us['epidata']+vacc22_us['epidata']+vacc23_us['epidata']+vacc24_us['epidata']+vacc25_us['epidata']+vacc26_us['epidata']+vacc27_us['epidata']+vacc28_us['epidata']
+    vacc3_us=vacc31_us['epidata']+vacc32_us['epidata']+vacc33_us['epidata']+vacc34_us['epidata']+vacc35_us['epidata']+vacc36_us['epidata']+vacc37_us['epidata']+vacc38_us['epidata']
+    vacc4_us=vacc41_us['epidata']+vacc42_us['epidata']+vacc43_us['epidata']+vacc44_us['epidata']+vacc45_us['epidata']+vacc46_us['epidata']#+vacc47_us['epidata']
+    vacc5_us=vacc51_us['epidata']+vacc52_us['epidata']+vacc53_us['epidata']+vacc54_us['epidata']+vacc55_us['epidata']+vacc56_us['epidata']+vacc57_us['epidata']
+    
+    vacc1_final = vacc1 + vacc1_us
+    vacc2_final = vacc2 + vacc2_us
+    vacc3_final = vacc3 + vacc3_us
+    vacc4_final = vacc4 + vacc4_us
+    vacc5_final = vacc5 + vacc5_us
+    
+    print('smoothed_wcovid_vaccinated',vacc18['result'], vacc18['message'], len(vacc18['epidata']))
+    print('smoothed_wtested_positive_14d',vacc28['result'], vacc28['message'], len(vacc28['epidata']))
+    print('smoothed_wwearing_mask',vacc38['result'], vacc38['message'], len(vacc38['epidata']))
+    print('smoothed_wtravel_outside_state_5d',vacc46['result'], vacc46['message'], len(vacc46['epidata']))
+    print('smoothed_wspent_time_1d',vacc57['result'], vacc57['message'], len(vacc57['epidata']))
+    #'''
+    
+    state_names=list(state_index.keys())
+    cols=['smoothed_wcovid_vaccinated','smoothed_wtested_positive_14d','smoothed_wwearing_mask_7d',
+          'smoothed_wtravel_outside_state_7d','smoothed_wspent_time_indoors_1d']
+    week_cases={}
+    for c in cols:
+        week_cases[c]=np.zeros((len(state_names),len(epiweek_date)))
+    #'''
+    week_cases[cols[0]]=read_survey_epidata(cols[0],vacc1_final,state_index,state_names,epiweek_date)
+    week_cases[cols[1]]=read_survey_epidata(cols[1],vacc2_final,state_index,state_names,epiweek_date)
+    week_cases[cols[2]]=read_survey_epidata(cols[2],vacc3_final,state_index,state_names,epiweek_date)
+    week_cases[cols[3]]=read_survey_epidata(cols[3],vacc4_final,state_index,state_names,epiweek_date)
+    week_cases[cols[4]]=read_survey_epidata(cols[4],vacc5_final,state_index,state_names,epiweek_date)
+    
+    unit_test(week_cases,cols,epiweek_date,state_index,"unit_test/vaccine_survey.csv")
+    #'''
+    return week_cases,cols
+
+
+# In[6]:
+
+
+# gets the delphi vaccine data from delphi api
 def read_delphi_vaccine(state_index,epiweek_date,start_week,end_week):
     #'''
+    # The 
     vacc11=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','state',[start_week, Epidata.range(start_week, 20210301)],'*')
+    vacc21=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','state',[start_week, Epidata.range(start_week, 20210301)],'*')
+    vacc31=Epidata.covidcast('fb-survey','smoothed_wwearing_mask','day','state',[start_week, Epidata.range(start_week, end_week)],'*')
+    vacc41=Epidata.covidcast('fb-survey','smoothed_wtravel_outside_state_5d','day','state',[start_week, Epidata.range(start_week, 20210301)],'*')
+    vacc51=Epidata.covidcast('fb-survey','smoothed_wspent_time_1d','day','state',[start_week, Epidata.range(start_week, 20210301)],'*')
+    
+    vacc11_us=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','nation',[start_week, Epidata.range(start_week, 20210301)],'*')
+    vacc21_us=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','nation',[start_week, Epidata.range(start_week, 20210301)],'*')
+    vacc31_us=Epidata.covidcast('fb-survey','smoothed_wwearing_mask','day','nation',[start_week, Epidata.range(start_week, end_week)],'*')
+    vacc41_us=Epidata.covidcast('fb-survey','smoothed_wtravel_outside_state_5d','day','nation',[start_week, Epidata.range(start_week, 20210301)],'*')
+    vacc51_us=Epidata.covidcast('fb-survey','smoothed_wspent_time_1d','day','nation',[start_week, Epidata.range(start_week, 20210301)],'*')
+    
+    vacc12=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','state',[20210301, Epidata.range(20210301, 20210501)],'*')
+    vacc13=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','state',[20210501, Epidata.range(20210501, 20210701)],'*')
+    vacc14=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','state',[20210701, Epidata.range(20210701, 20210901)],'*')
+    vacc15=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','state',[20210901, Epidata.range(20210901, 20211101)],'*')
+    vacc16=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','state',[20211101, Epidata.range(20211101, 20220101)],'*')
+    vacc17=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','state',[20220101, Epidata.range(20220101, end_week)],'*')
+    
+    vacc12_us=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','nation',[20210301, Epidata.range(20210301, 20210501)],'*')
+    vacc13_us=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','nation',[20210501, Epidata.range(20210501, 20210701)],'*')
+    vacc14_us=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','nation',[20210701, Epidata.range(20210701, 20210901)],'*')
+    vacc15_us=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','nation',[20210901, Epidata.range(20210901, 20211101)],'*')
+    vacc16_us=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','nation',[20211101, Epidata.range(20211101, 20220101)],'*')
+    vacc17_us=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','nation',[20220101, Epidata.range(20220101, end_week)],'*')
+    
+    vacc22=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','state',[20210301, Epidata.range(20210301, 20210601)],'*')
+    vacc23=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','state',[20210601, Epidata.range(20210601, 20210901)],'*')
+    vacc24=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','state',[20210601, Epidata.range(20210901, 20211101)],'*')
+    vacc25=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','state',[20210601, Epidata.range(20211101, 20220101)],'*')
+    vacc26=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','state',[20220101, Epidata.range(20220101, end_week)],'*')
+    
+    vacc22_us=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','nation',[20210301, Epidata.range(20210301, 20210601)],'*')
+    vacc23_us=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','nation',[20210601, Epidata.range(20210601, 20210901)],'*')
+    vacc24_us=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','nation',[20210601, Epidata.range(20210901, 20211101)],'*')
+    vacc25_us=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','nation',[20210601, Epidata.range(20211101, 20220101)],'*')
+    vacc26_us=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','nation',[20220101, Epidata.range(20220101, end_week)],'*')
+    
+    #vacc32=Epidata.covidcast('fb-survey','smoothed_wearing_mask','day','state',[20210301, Epidata.range(20210301, end_week)],'*')
+    vacc42=Epidata.covidcast('fb-survey','smoothed_wtravel_outside_state_5d','day','state',[20210301, Epidata.range(20210301, end_week)],'*')
+    vacc52=Epidata.covidcast('fb-survey','smoothed_wspent_time_1d','day','state',[20210301, Epidata.range(20210301, end_week)],'*')
+    
+    vacc42_us=Epidata.covidcast('fb-survey','smoothed_wtravel_outside_state_5d','day','nation',[20210301, Epidata.range(20210301, end_week)],'*')
+    vacc52_us=Epidata.covidcast('fb-survey','smoothed_wspent_time_1d','day','nation',[20210301, Epidata.range(20210301, end_week)],'*')
+    
+    vacc1=vacc11['epidata']+vacc12['epidata']+vacc13['epidata']+vacc14['epidata']+vacc15['epidata']+vacc16['epidata']+vacc17['epidata']
+    vacc2=vacc21['epidata']+vacc22['epidata']+vacc23['epidata']+vacc24['epidata']+vacc25['epidata']+vacc26['epidata']
+    vacc3=vacc31['epidata']#+vacc32['epidata']
+    vacc4=vacc41['epidata']+vacc42['epidata']
+    vacc5=vacc51['epidata']+vacc52['epidata']
+    
+    vacc1_us=vacc11_us['epidata']+vacc12_us['epidata']+vacc13_us['epidata']+vacc14_us['epidata']+vacc15_us['epidata']+vacc16_us['epidata']+vacc17_us['epidata']
+    vacc2_us=vacc21_us['epidata']+vacc22_us['epidata']+vacc23_us['epidata']+vacc24_us['epidata']+vacc25_us['epidata']+vacc26_us['epidata']
+    vacc3_us=vacc31_us['epidata']#+vacc32['epidata']
+    vacc4_us=vacc41_us['epidata']+vacc42_us['epidata']
+    vacc5_us=vacc51_us['epidata']+vacc52_us['epidata']
+    
+    vacc1_final = vacc1 + vacc1_us
+    vacc2_final = vacc2 + vacc2_us
+    vacc3_final = vacc3 + vacc3_us
+    vacc4_final = vacc4 + vacc4_us
+    vacc5_final = vacc5 + vacc5_us
+    
+    print('smoothed_wcovid_vaccinated',vacc17['result'], vacc17['message'], len(vacc17['epidata']))
+    print('smoothed_wtested_positive_14d',vacc26['result'], vacc26['message'], len(vacc26['epidata']))
+    print('smoothed_wwearing_mask',vacc31['result'], vacc31['message'], len(vacc31['epidata']))
+    print('smoothed_wtravel_outside_state_5d',vacc42['result'], vacc42['message'], len(vacc42['epidata']))
+    print('smoothed_wspent_time_1d',vacc52['result'], vacc52['message'], len(vacc52['epidata']))
+    #'''
+    
+    state_names=list(state_index.keys())
+    cols=['smoothed_wcovid_vaccinated','smoothed_wtested_positive_14d','smoothed_wwearing_mask',
+          'smoothed_wtravel_outside_state_5d','smoothed_wspent_time_1d']
+    week_cases={}
+    for c in cols:
+        week_cases[c]=np.zeros((len(state_names),len(epiweek_date)))
+    #'''
+    week_cases[cols[0]]=read_survey_epidata(cols[0],vacc1_final,state_index,state_names,epiweek_date)
+    week_cases[cols[1]]=read_survey_epidata(cols[1],vacc2_final,state_index,state_names,epiweek_date)
+    week_cases[cols[2]]=read_survey_epidata(cols[2],vacc3_final,state_index,state_names,epiweek_date)
+    week_cases[cols[3]]=read_survey_epidata(cols[3],vacc4_final,state_index,state_names,epiweek_date)
+    week_cases[cols[4]]=read_survey_epidata(cols[4],vacc5_final,state_index,state_names,epiweek_date)
+    
+    unit_test(week_cases,cols,epiweek_date,state_index,"unit_test/vaccine_survey.csv")
+    #'''
+    return week_cases,cols
+
+
+# In[7]:
+
+
+# gets the delphi vaccine data from delphi api
+def read_delphi_vaccine_test(state_index,epiweek_date,start_week,end_week):
+    #'''
+    # The 
+    
+    vacc1 = []
+    vacc2 = []
+    vacc3 = []
+    vacc4 = []
+    vacc5 = []
+    vacc1.append(Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','state',[start_week, Epidata.range(start_week, 20210301)],'*'))
+    vacc2.append(Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','state',[start_week, Epidata.range(start_week, 20210301)],'*'))
+    vacc3.append(Epidata.covidcast('fb-survey','smoothed_wwearing_mask_7d','day','state',[start_week, Epidata.range(start_week, end_week)],'*'))
+    
+    vacc4.append(Epidata.covidcast('fb-survey','smoothed_wtravel_outside_state_5d','day','state',[start_week, Epidata.range(start_week, 20210301)],'*'))
+    vacc5.append(Epidata.covidcast('fb-survey','smoothed_wspent_time_1d','day','state',[start_week, Epidata.range(start_week, 20210301)],'*'))
+    
+    start_date = date(2021, 3, 1)
+    while start_date < date.today() + relativedelta(months=-2): 
+        start = (int) (start_date.strftime("%Y%m%d"))
+        start_date = start_date + relativedelta(months=+2)
+        end = (int) (start_date.strftime("%Y%m%d"))
+        start = (int) (start_date.strftime("%Y%m%d"))
+        start_date = start_date + relativedelta(months=+2)
+        end = (int) (start_date.strftime("%Y%m%d"))
+        print(start)
+        print(end)
+        vacc1.append(Epidata.covidcast('fb-survey', 'smoothed_wcovid_vaccinated', 'day', 'state', [start, Epidata.range(start, end)], '*'))
+        vacc1_us.append(Epidata.covidcast('fb-survey', 'smoothed_wtested_positive_14d', 'day', 'nation', [start, Epidata.range(start, end)], '*'))
+        fb_res_wli.append(Epidata.covidcast('fb-survey', 'smoothed_wwearing_mask_7d', 'day', 'state', [start, Epidata.range(start, end)], '*'))
+        fb_res_wli_us.append(Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'nation', [start, Epidata.range(start, end)], '*'))
+    
+    for i in range(1, len(fb_res_cli)): 
+        fb_cli += fb_res_cli[i]['epidata']
+        fb_cli_us += fb_res_cli_us[i]['epidata']
+    
+    
+    """vacc11=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','state',[start_week, Epidata.range(start_week, 20210301)],'*')
     vacc21=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','state',[start_week, Epidata.range(start_week, 20210301)],'*')
     vacc31=Epidata.covidcast('fb-survey','smoothed_wwearing_mask','day','state',[start_week, Epidata.range(start_week, end_week)],'*')
     vacc41=Epidata.covidcast('fb-survey','smoothed_wtravel_outside_state_5d','day','state',[start_week, Epidata.range(start_week, 20210301)],'*')
@@ -105,28 +390,29 @@ def read_delphi_vaccine(state_index,epiweek_date,start_week,end_week):
     vacc14=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','state',[20210701, Epidata.range(20210701, 20210901)],'*')
     vacc15=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','state',[20210901, Epidata.range(20210901, 20211101)],'*')
     vacc16=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','state',[20211101, Epidata.range(20211101, 20220101)],'*')
-    vacc17=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','state',[20220101, Epidata.range(20211101, end_week)],'*')
+    vacc17=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','state',[20220101, Epidata.range(20220101, end_week)],'*')
     
     vacc22=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','state',[20210301, Epidata.range(20210301, 20210601)],'*')
     vacc23=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','state',[20210601, Epidata.range(20210601, 20210901)],'*')
     vacc24=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','state',[20210601, Epidata.range(20210901, 20211101)],'*')
-    vacc25=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','state',[20210601, Epidata.range(20211101, end_week)],'*')
+    vacc25=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','state',[20210601, Epidata.range(20211101, 20220101)],'*')
+    vacc26=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','state',[20220101, Epidata.range(20220101, end_week)],'*')
 
     #vacc32=Epidata.covidcast('fb-survey','smoothed_wearing_mask','day','state',[20210301, Epidata.range(20210301, end_week)],'*')
     vacc42=Epidata.covidcast('fb-survey','smoothed_wtravel_outside_state_5d','day','state',[20210301, Epidata.range(20210301, end_week)],'*')
     vacc52=Epidata.covidcast('fb-survey','smoothed_wspent_time_1d','day','state',[20210301, Epidata.range(20210301, end_week)],'*')
     
     vacc1=vacc11['epidata']+vacc12['epidata']+vacc13['epidata']+vacc14['epidata']+vacc15['epidata']+vacc16['epidata']+vacc17['epidata']
-    vacc2=vacc21['epidata']+vacc22['epidata']+vacc23['epidata']+vacc24['epidata']+vacc25['epidata']
+    vacc2=vacc21['epidata']+vacc22['epidata']+vacc23['epidata']+vacc24['epidata']+vacc25['epidata']+vacc26['epidata']
     vacc3=vacc31['epidata']#+vacc32['epidata']
     vacc4=vacc41['epidata']+vacc42['epidata']
     vacc5=vacc51['epidata']+vacc52['epidata']
     
-    print('smoothed_wcovid_vaccinated',vacc16['result'], vacc16['message'], len(vacc16['epidata']))
-    print('smoothed_wtested_positive_14d',vacc25['result'], vacc25['message'], len(vacc25['epidata']))
+    print('smoothed_wcovid_vaccinated',vacc17['result'], vacc17['message'], len(vacc17['epidata']))
+    print('smoothed_wtested_positive_14d',vacc26['result'], vacc26['message'], len(vacc26['epidata']))
     print('smoothed_wwearing_mask',vacc31['result'], vacc31['message'], len(vacc31['epidata']))
     print('smoothed_wtravel_outside_state_5d',vacc42['result'], vacc42['message'], len(vacc42['epidata']))
-    print('smoothed_wspent_time_1d',vacc52['result'], vacc52['message'], len(vacc52['epidata']))
+    print('smoothed_wspent_time_1d',vacc52['result'], vacc52['message'], len(vacc52['epidata']))"""
     #'''
     
     state_names=list(state_index.keys())
@@ -147,12 +433,53 @@ def read_delphi_vaccine(state_index,epiweek_date,start_week,end_week):
     return week_cases,cols
 
 
-# In[30]:
+# In[8]:
 
 
 def read_delphi_fb_google_survey(state_index,epiweek_date,start_week,end_week):
     #fb_res_cli = Epidata.covidcast('fb-survey', 'raw_cli', 'day', 'state', [start_week, Epidata.range(start_week, end_week)], '*')
-    fb_res_cli1 = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'state', [start_week, Epidata.range(start_week, 20200601)], '*')
+    
+    fb_res_cli = []
+    fb_res_cli_us = []
+    fb_res_wli = []
+    fb_res_wli_us = []
+    fb_res_cli.append(Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'state', [start_week, Epidata.range(start_week, 20200601)], '*'))
+    fb_res_cli.append(Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'state', [20200601, Epidata.range(20200601, 20200701)], '*'))
+    fb_res_cli_us.append(Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'nation', [start_week, Epidata.range(start_week, 20200601)], '*'))
+    fb_res_cli_us.append(Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'nation', [20200601, Epidata.range(20200601, 20200701)], '*'))
+    fb_res_wli.append(Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'state', [start_week, Epidata.range(start_week, 20200601)], '*'))
+    fb_res_wli.append(Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'state', [20200601, Epidata.range(20200601, 20200701)], '*'))
+    fb_res_wli_us.append(Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'nation', [start_week, Epidata.range(start_week, 20200601)], '*'))
+    fb_res_wli_us.append(Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'nation', [20200601, Epidata.range(20200601, 20200701)], '*'))
+    start_date = date(2020, 7, 1)
+    while start_date < date.today() + relativedelta(months=-2): 
+        start = (int) (start_date.strftime("%Y%m%d"))
+        start_date = start_date + relativedelta(months=+2)
+        end = (int) (start_date.strftime("%Y%m%d"))
+        print(start)
+        print(end)
+        fb_res_cli.append(Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'state', [start, Epidata.range(start, end)], '*'))
+        fb_res_cli_us.append(Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'nation', [start, Epidata.range(start, end)], '*'))
+        fb_res_wli.append(Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'state', [start, Epidata.range(start, end)], '*'))
+        fb_res_wli_us.append(Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'nation', [start, Epidata.range(start, end)], '*'))
+    
+    fb_res_cli.append(Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'state',[end, Epidata.range(end, end_week)], '*'))
+    fb_res_cli_us.append(Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'nation',[end, Epidata.range(end, end_week)], '*'))
+    fb_res_wli.append(Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'state',[end, Epidata.range(end, end_week)], '*'))
+    fb_res_wli_us.append(Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'nation',[end, Epidata.range(end, end_week)], '*'))
+    fb_cli = fb_res_cli[0]['epidata']
+    fb_cli_us = fb_res_cli_us[0]['epidata']
+    fb_wli = fb_res_wli[0]['epidata']
+    fb_wli_us = fb_res_wli_us[0]['epidata']
+    for i in range(1, len(fb_res_cli)): 
+        fb_cli += fb_res_cli[i]['epidata']
+        fb_cli_us += fb_res_cli_us[i]['epidata']
+    for i in range(1, len(fb_res_wli)):
+        fb_wli += fb_res_wli[i]['epidata']
+        fb_wli_us += fb_res_wli_us[i]['epidata']
+    fb_res_cli_final = fb_cli + fb_cli_us
+    fb_res_wli_final = fb_wli + fb_wli_us
+    """fb_res_cli1 = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'state', [start_week, Epidata.range(start_week, 20200601)], '*')
     fb_res_cli2 = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'state', [20200601, Epidata.range(20200601, 20200701)], '*')
     fb_res_cli3 = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'state', [20200701, Epidata.range(20200701, 20200901)], '*')
     fb_res_cli4 = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'state', [20200901, Epidata.range(20200901, 20201101)], '*')
@@ -162,7 +489,22 @@ def read_delphi_fb_google_survey(state_index,epiweek_date,start_week,end_week):
     fb_res_cli8 = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'state', [20210501, Epidata.range(20210501, 20210701)], '*')
     fb_res_cli9 = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'state', [20210701, Epidata.range(20210701, 20210901)], '*')
     fb_res_cli10 = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'state', [20210901, Epidata.range(20210901, 20211101)], '*')
-    fb_res_cli11 = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'state', [20211101, Epidata.range(20211101, end_week)], '*')
+    fb_res_cli11 = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'state', [20211101, Epidata.range(20211101, 20220101)], '*')
+    fb_res_cli12 = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'state', [20220101, Epidata.range(20220101, end_week)], '*')
+
+    fb_res_cli1_us = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'nation', [start_week, Epidata.range(start_week, 20200601)], '*')
+    fb_res_cli2_us = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'nation', [20200601, Epidata.range(20200601, 20200701)], '*')
+    fb_res_cli3_us = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'nation', [20200701, Epidata.range(20200701, 20200901)], '*')
+    fb_res_cli4_us = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'nation', [20200901, Epidata.range(20200901, 20201101)], '*')
+    fb_res_cli5_us = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'nation', [20201101, Epidata.range(20201101, 20210101)], '*')
+    fb_res_cli6_us = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'nation', [20210101, Epidata.range(20210101, 20210301)], '*')
+    fb_res_cli7_us = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'nation', [20210301, Epidata.range(20210301, 20210501)], '*')
+    fb_res_cli8_us = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'nation', [20210501, Epidata.range(20210501, 20210701)], '*')
+    fb_res_cli9_us = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'nation', [20210701, Epidata.range(20210701, 20210901)], '*')
+    fb_res_cli10_us = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'nation', [20210901, Epidata.range(20210901, 20211101)], '*')
+    fb_res_cli11_us = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'nation', [20211101, Epidata.range(20211101, 20220101)], '*')
+    fb_res_cli12_us = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'nation', [20220101, Epidata.range(20220101, end_week)], '*')
+    
 
     #'''
     fb_cli1=fb_res_cli1['epidata']+fb_res_cli2['epidata']
@@ -175,10 +517,190 @@ def read_delphi_fb_google_survey(state_index,epiweek_date,start_week,end_week):
     fb_cli7=fb_cli6+fb_res_cli8['epidata']
     fb_cli8 = fb_cli7 + fb_res_cli9['epidata']
     fb_cli9=fb_cli8 + fb_res_cli10['epidata']
-    fb_res_cli=fb_cli9+fb_res_cli11['epidata']
-    #print(fb_res1['epidata'][0])
+    fb_res_cli=fb_cli9+fb_res_cli11['epidata']+fb_res_cli12['epidata']
+    
+    fb_cli1_us = fb_res_cli1_us['epidata'] + fb_res_cli2_us['epidata']
+    fb_cli2_us=fb_cli1_us+fb_res_cli3_us['epidata']
+    fb_cli3_us=fb_cli2_us+fb_res_cli4_us['epidata']
+    #fb_res_cli=fb_cli3+fb_res_cli5['epidata']
+    fb_cli4_us=fb_cli3_us+fb_res_cli5_us['epidata'] 
+    fb_cli5_us=fb_cli4_us+fb_res_cli6_us['epidata']
+    fb_cli6_us=fb_cli5_us+fb_res_cli7_us['epidata']
+    fb_cli7_us=fb_cli6_us+fb_res_cli8_us['epidata']
+    fb_cli8_us = fb_cli7_us + fb_res_cli9_us['epidata']
+    fb_cli9_us=fb_cli8_us + fb_res_cli10_us['epidata']
+    fb_res_cli_us=fb_cli9_us+fb_res_cli11_us['epidata']+fb_res_cli12_us['epidata']
+    
+    fb_res_cli_final = fb_res_cli + fb_res_cli_us
+    #print(fb_res1['epidata'][0])"""
     #'''
     google_res_cli = Epidata.covidcast('google-survey', 'raw_cli', 'day', 'state', [start_week, Epidata.range(start_week, end_week)], '*')
+    #google_res_cli_us = Epidata.covidcast('google-survey', 'raw_cli', 'day', 'nation', [start_week, Epidata.range(start_week, end_week)], '*')
+    
+    
+    """
+    #fb_res_wli = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'state', [start_week, Epidata.range(start_week, end_week)], '*')
+    fb_res_wli1 = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'state', [start_week, Epidata.range(start_week, 20200601)], '*')
+    fb_res_wli2 = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'state', [20200601, Epidata.range(20200601, 20200701)], '*')
+    fb_res_wli3 = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'state', [20200701, Epidata.range(20200701, 20200901)], '*')
+    fb_res_wli4 = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'state', [20200901, Epidata.range(20200901, 20201101)], '*')
+    fb_res_wli5 = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'state', [20201101, Epidata.range(20201101, 20210101)], '*')
+    fb_res_wli6 = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'state', [20210101, Epidata.range(20210101, 20210301)], '*')
+    fb_res_wli7 = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'state', [20210301, Epidata.range(20210301, 20210501)], '*')
+    fb_res_wli8 = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'state', [20210501, Epidata.range(20210501, 20210701)], '*')
+    fb_res_wli9 = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'state', [20210701, Epidata.range(20210701, 20210901)], '*')
+    fb_res_wli10 = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'state', [20210901, Epidata.range(20210901, 20211101)], '*')
+    fb_res_wli11 = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'state', [20211101, Epidata.range(20211101, 20220101)], '*')
+    fb_res_wli12 = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'state', [20220101, Epidata.range(20220101, end_week)], '*')
+    
+    fb_res_wli1_us = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'nation', [start_week, Epidata.range(start_week, 20200601)], '*')
+    fb_res_wli2_us = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'nation', [20200601, Epidata.range(20200601, 20200701)], '*')
+    fb_res_wli3_us = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'nation', [20200701, Epidata.range(20200701, 20200901)], '*')
+    fb_res_wli4_us = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'nation', [20200901, Epidata.range(20200901, 20201101)], '*')
+    fb_res_wli5_us = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'nation', [20201101, Epidata.range(20201101, 20210101)], '*')
+    fb_res_wli6_us = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'nation', [20210101, Epidata.range(20210101, 20210301)], '*')
+    fb_res_wli7_us = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'nation', [20210301, Epidata.range(20210301, 20210501)], '*')
+    fb_res_wli8_us = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'nation', [20210501, Epidata.range(20210501, 20210701)], '*')
+    fb_res_wli9_us = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'nation', [20210701, Epidata.range(20210701, 20210901)], '*')
+    fb_res_wli10_us = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'nation', [20210901, Epidata.range(20210901, 20211101)], '*')
+    fb_res_wli11_us = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'nation', [20211101, Epidata.range(20211101, 20220101)], '*')
+    fb_res_wli12_us = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'nation', [20220101, Epidata.range(20220101, end_week)], '*')
+    
+    #'''
+    fb_wli1=fb_res_wli1['epidata']+fb_res_wli2['epidata']
+    fb_wli2=fb_wli1+fb_res_wli3['epidata']
+    fb_wli3=fb_wli2+fb_res_wli4['epidata']
+    fb_wli4=fb_wli3+fb_res_wli5['epidata']
+    fb_wli5=fb_wli4+fb_res_wli6['epidata']
+    fb_wli6=fb_wli5+fb_res_wli7['epidata']
+    fb_wli7=fb_wli6+fb_res_wli8['epidata']
+    fb_wli8=fb_wli7+fb_res_wli9['epidata']
+    fb_wli9=fb_wli8+fb_res_wli10['epidata']
+    #fb_res_wli=fb_wli3+fb_res_wli5['epidata']
+    fb_res_wli=fb_wli9+fb_res_wli11['epidata']+fb_res_wli12['epidata']
+    
+    fb_wli1_us=fb_res_wli1_us['epidata']+fb_res_wli2_us['epidata']
+    fb_wli2_us=fb_wli1_us+fb_res_wli3_us['epidata']
+    fb_wli3_us=fb_wli2_us+fb_res_wli4_us['epidata']
+    fb_wli4_us=fb_wli3_us+fb_res_wli5_us['epidata']
+    fb_wli5_us=fb_wli4_us+fb_res_wli6_us['epidata']
+    fb_wli6_us=fb_wli5_us+fb_res_wli7_us['epidata']
+    fb_wli7_us=fb_wli6_us+fb_res_wli8_us['epidata']
+    fb_wli8_us=fb_wli7_us+fb_res_wli9_us['epidata']
+    fb_wli9_us=fb_wli8_us+fb_res_wli10_us['epidata']
+    #fb_res_wli=fb_wli3+fb_res_wli5['epidata']
+    fb_res_wli_us=fb_wli9_us+fb_res_wli11_us['epidata']+fb_res_wli12_us['epidata']
+    
+    fb_res_wli_final = fb_res_wli + fb_res_wli_us
+    
+    #google_res_wli = Epidata.covidcast('google-survey', 'raw_wili', 'day', 'state', [start_week, Epidata.range(start_week, end_week)], '*')
+    
+    #print('fb_cli1',fb_res_cli1['result'], fb_res_cli1['message'], len(fb_res_cli1['epidata']))
+    #print('fb_cli2',fb_res_cli2['result'], fb_res_cli2['message'], len(fb_res_cli2['epidata']))
+    #print('fb_cli3',fb_res_cli3['result'], fb_res_cli3['message'], len(fb_res_cli3['epidata']))
+    print('fb_wcli4',fb_res_cli4['result'], fb_res_cli4['message'], len(fb_res_cli4['epidata']))
+    print('fb_wcli5',fb_res_cli9['result'], fb_res_cli9['message'], len(fb_res_cli9['epidata']))
+    print('fb_wcli6',fb_res_cli10['result'], fb_res_cli10['message'], len(fb_res_cli10['epidata']))
+    print('fb_wcli8',fb_res_cli11['result'], fb_res_cli11['message'], len(fb_res_cli11['epidata']))
+    print('fb_wcli9',fb_res_cli12['result'], fb_res_cli12['message'], len(fb_res_cli12['epidata']))
+    
+    print('google_cli',google_res_cli['result'], google_res_cli['message'], len(google_res_cli['epidata']))
+    
+    #print(fb_res_wli['result'], fb_res_wli['message'], len(fb_res_wli['epidata']))
+    
+    #print('fb_wili1',fb_res_wli1['result'], fb_res_wli1['message'], len(fb_res_wli1['epidata']))
+    #print('fb_wili2',fb_res_wli2['result'], fb_res_wli2['message'], len(fb_res_wli2['epidata']))
+    #print('fb_wili3',fb_res_wli3['result'], fb_res_wli3['message'], len(fb_res_wli3['epidata']))
+    print('fb_wili4',fb_res_wli4['result'], fb_res_wli4['message'], len(fb_res_wli4['epidata']))
+    print('fb_wili5',fb_res_wli5['result'], fb_res_wli5['message'], len(fb_res_wli5['epidata']))
+    print('fb_wili10',fb_res_wli10['result'], fb_res_wli10['message'], len(fb_res_wli10['epidata']))
+    print('fb_wili11',fb_res_wli11['result'], fb_res_wli11['message'], len(fb_res_wli11['epidata']))
+    print('fb_wili12',fb_res_wli12['result'], fb_res_wli12['message'], len(fb_res_wli12['epidata']))
+    
+    print('fb_wcli len',len(fb_res_cli))
+    print('fb_wli len',len(fb_res_wli))"""
+    #'''
+    state_names=list(state_index.keys())
+    cols=['fb_survey_wcli','google_survey_cli','fb_survey_wili']
+    week_cases={}
+    for c in cols:
+        week_cases[c]=np.zeros((len(state_names),len(epiweek_date)))
+    #'''
+    #week_cases[cols[0]]=read_survey_epidata(cols[0],fb_res_cli['epidata'],state_index,state_names,epiweek_date)
+    week_cases[cols[0]]=read_survey_epidata(cols[0],fb_res_cli_final,state_index,state_names,epiweek_date)
+    week_cases[cols[1]]=read_survey_epidata(cols[1],google_res_cli['epidata'],state_index,state_names,epiweek_date)
+    #week_cases[cols[2]]=read_survey_epidata(cols[2],fb_res_wli['epidata'],state_index,state_names,epiweek_date)
+    week_cases[cols[2]]=read_survey_epidata(cols[2],fb_res_wli_final,state_index,state_names,epiweek_date)
+    #'''
+
+    unit_test(week_cases,cols,epiweek_date,state_index,"unit_test/fb-google-survey.csv")
+    return week_cases,cols
+
+
+# In[9]:
+
+
+def read_delphi_fb_google_survey_test(state_index,epiweek_date,start_week,end_week):
+    #fb_res_cli = Epidata.covidcast('fb-survey', 'raw_cli', 'day', 'state', [start_week, Epidata.range(start_week, end_week)], '*')
+    
+    fb_res_cli1 = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'state', [start_week, Epidata.range(start_week, 20200601)], '*')
+    fb_res_cli2 = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'state', [20200601, Epidata.range(20200601, 20200701)], '*')
+    fb_res_cli3 = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'state', [20200701, Epidata.range(20200701, 20200901)], '*')
+    fb_res_cli4 = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'state', [20200901, Epidata.range(20200901, 20201101)], '*')
+    fb_res_cli5 = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'state', [20201101, Epidata.range(20201101, 20210101)], '*')
+    fb_res_cli6 = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'state', [20210101, Epidata.range(20210101, 20210301)], '*')
+    fb_res_cli7 = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'state', [20210301, Epidata.range(20210301, 20210501)], '*')
+    fb_res_cli8 = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'state', [20210501, Epidata.range(20210501, 20210701)], '*')
+    fb_res_cli9 = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'state', [20210701, Epidata.range(20210701, 20210901)], '*')
+    fb_res_cli10 = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'state', [20210901, Epidata.range(20210901, 20211101)], '*')
+    fb_res_cli11 = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'state', [20211101, Epidata.range(20211101, 20220101)], '*')
+    fb_res_cli12 = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'state', [20220101, Epidata.range(20220101, 20220301)], '*')
+    fb_res_cli13 = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'state', [20220301, Epidata.range(20220301, end_week)], '*')
+
+    fb_res_cli1_us = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'nation', [start_week, Epidata.range(start_week, 20200601)], '*')
+    fb_res_cli2_us = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'nation', [20200601, Epidata.range(20200601, 20200701)], '*')
+    fb_res_cli3_us = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'nation', [20200701, Epidata.range(20200701, 20200901)], '*')
+    fb_res_cli4_us = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'nation', [20200901, Epidata.range(20200901, 20201101)], '*')
+    fb_res_cli5_us = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'nation', [20201101, Epidata.range(20201101, 20210101)], '*')
+    fb_res_cli6_us = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'nation', [20210101, Epidata.range(20210101, 20210301)], '*')
+    fb_res_cli7_us = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'nation', [20210301, Epidata.range(20210301, 20210501)], '*')
+    fb_res_cli8_us = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'nation', [20210501, Epidata.range(20210501, 20210701)], '*')
+    fb_res_cli9_us = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'nation', [20210701, Epidata.range(20210701, 20210901)], '*')
+    fb_res_cli10_us = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'nation', [20210901, Epidata.range(20210901, 20211101)], '*')
+    fb_res_cli11_us = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'nation', [20211101, Epidata.range(20211101, 20220101)], '*')
+    fb_res_cli12_us = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'nation', [20220101, Epidata.range(20220101, 20220301)], '*')
+    fb_res_cli13_us = Epidata.covidcast('fb-survey', 'raw_wcli', 'day', 'nation', [20220301, Epidata.range(20220301, end_week)], '*')
+
+    #'''
+    fb_cli1=fb_res_cli1['epidata']+fb_res_cli2['epidata']
+    fb_cli2=fb_cli1+fb_res_cli3['epidata']
+    fb_cli3=fb_cli2+fb_res_cli4['epidata']
+    #fb_res_cli=fb_cli3+fb_res_cli5['epidata']
+    fb_cli4=fb_cli3+fb_res_cli5['epidata'] 
+    fb_cli5=fb_cli4+fb_res_cli6['epidata']
+    fb_cli6=fb_cli5+fb_res_cli7['epidata']
+    fb_cli7=fb_cli6+fb_res_cli8['epidata']
+    fb_cli8 = fb_cli7 + fb_res_cli9['epidata']
+    fb_cli9=fb_cli8 + fb_res_cli10['epidata']
+    fb_res_cli=fb_cli9+fb_res_cli11['epidata']+fb_res_cli12['epidata']+fb_res_cli13['epidata']
+    
+    fb_cli1_us = fb_res_cli1_us['epidata'] + fb_res_cli2_us['epidata']
+    fb_cli2_us=fb_cli1_us+fb_res_cli3_us['epidata']
+    fb_cli3_us=fb_cli2_us+fb_res_cli4_us['epidata']
+    #fb_res_cli=fb_cli3+fb_res_cli5['epidata']
+    fb_cli4_us=fb_cli3_us+fb_res_cli5_us['epidata'] 
+    fb_cli5_us=fb_cli4_us+fb_res_cli6_us['epidata']
+    fb_cli6_us=fb_cli5_us+fb_res_cli7_us['epidata']
+    fb_cli7_us=fb_cli6_us+fb_res_cli8_us['epidata']
+    fb_cli8_us = fb_cli7_us + fb_res_cli9_us['epidata']
+    fb_cli9_us=fb_cli8_us + fb_res_cli10_us['epidata']
+    fb_res_cli_us=fb_cli9_us+fb_res_cli11_us['epidata']+fb_res_cli12_us['epidata']+fb_res_cli13_us['epidata']
+    
+    fb_res_cli_final = fb_res_cli + fb_res_cli_us
+    #print(fb_res1['epidata'][0])
+    #'''
+    #google_res_cli = Epidata.covidcast('google-survey', 'raw_cli', 'day', 'state', [start_week, Epidata.range(start_week, end_week)], '*')
+    #google_res_cli_us = Epidata.covidcast('google-survey', 'raw_cli', 'day', 'nation', [start_week, Epidata.range(start_week, end_week)], '*')
     
     #fb_res_wli = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'state', [start_week, Epidata.range(start_week, end_week)], '*')
     fb_res_wli1 = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'state', [start_week, Epidata.range(start_week, 20200601)], '*')
@@ -191,8 +713,23 @@ def read_delphi_fb_google_survey(state_index,epiweek_date,start_week,end_week):
     fb_res_wli8 = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'state', [20210501, Epidata.range(20210501, 20210701)], '*')
     fb_res_wli9 = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'state', [20210701, Epidata.range(20210701, 20210901)], '*')
     fb_res_wli10 = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'state', [20210901, Epidata.range(20210901, 20211101)], '*')
-    fb_res_wli11 = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'state', [20211101, Epidata.range(20211101, end_week)], '*')
-
+    fb_res_wli11 = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'state', [20211101, Epidata.range(20211101, 20220101)], '*')
+    fb_res_wli12 = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'state', [20220101, Epidata.range(20220101, 20220301)], '*')
+    fb_res_wli13 = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'state', [20220301, Epidata.range(20220301, end_week)], '*')
+    
+    fb_res_wli1_us = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'nation', [start_week, Epidata.range(start_week, 20200601)], '*')
+    fb_res_wli2_us = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'nation', [20200601, Epidata.range(20200601, 20200701)], '*')
+    fb_res_wli3_us = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'nation', [20200701, Epidata.range(20200701, 20200901)], '*')
+    fb_res_wli4_us = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'nation', [20200901, Epidata.range(20200901, 20201101)], '*')
+    fb_res_wli5_us = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'nation', [20201101, Epidata.range(20201101, 20210101)], '*')
+    fb_res_wli6_us = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'nation', [20210101, Epidata.range(20210101, 20210301)], '*')
+    fb_res_wli7_us = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'nation', [20210301, Epidata.range(20210301, 20210501)], '*')
+    fb_res_wli8_us = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'nation', [20210501, Epidata.range(20210501, 20210701)], '*')
+    fb_res_wli9_us = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'nation', [20210701, Epidata.range(20210701, 20210901)], '*')
+    fb_res_wli10_us = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'nation', [20210901, Epidata.range(20210901, 20211101)], '*')
+    fb_res_wli11_us = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'nation', [20211101, Epidata.range(20211101, 20220101)], '*')
+    fb_res_wli12_us = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'nation', [20220101, Epidata.range(20220101, 20220301)], '*')
+    fb_res_wli13_us = Epidata.covidcast('fb-survey', 'raw_wili', 'day', 'nation', [20220301, Epidata.range(20220101, end_week)], '*')
     #'''
     fb_wli1=fb_res_wli1['epidata']+fb_res_wli2['epidata']
     fb_wli2=fb_wli1+fb_res_wli3['epidata']
@@ -204,7 +741,21 @@ def read_delphi_fb_google_survey(state_index,epiweek_date,start_week,end_week):
     fb_wli8=fb_wli7+fb_res_wli9['epidata']
     fb_wli9=fb_wli8+fb_res_wli10['epidata']
     #fb_res_wli=fb_wli3+fb_res_wli5['epidata']
-    fb_res_wli=fb_wli9+fb_res_wli11['epidata']
+    fb_res_wli=fb_wli9+fb_res_wli11['epidata']+fb_res_wli12['epidata']+fb_res_wli13['epidata']
+    
+    fb_wli1_us=fb_res_wli1_us['epidata']+fb_res_wli2_us['epidata']
+    fb_wli2_us=fb_wli1_us+fb_res_wli3_us['epidata']
+    fb_wli3_us=fb_wli2_us+fb_res_wli4_us['epidata']
+    fb_wli4_us=fb_wli3_us+fb_res_wli5_us['epidata']
+    fb_wli5_us=fb_wli4_us+fb_res_wli6_us['epidata']
+    fb_wli6_us=fb_wli5_us+fb_res_wli7_us['epidata']
+    fb_wli7_us=fb_wli6_us+fb_res_wli8_us['epidata']
+    fb_wli8_us=fb_wli7_us+fb_res_wli9_us['epidata']
+    fb_wli9_us=fb_wli8_us+fb_res_wli10_us['epidata']
+    #fb_res_wli=fb_wli3+fb_res_wli5['epidata']
+    fb_res_wli_us=fb_wli9_us+fb_res_wli11_us['epidata']+fb_res_wli12_us['epidata']+fb_res_wli13_us['epidata']
+    
+    fb_res_wli_final = fb_res_wli + fb_res_wli_us
     
     #google_res_wli = Epidata.covidcast('google-survey', 'raw_wili', 'day', 'state', [start_week, Epidata.range(start_week, end_week)], '*')
     
@@ -212,12 +763,12 @@ def read_delphi_fb_google_survey(state_index,epiweek_date,start_week,end_week):
     #print('fb_cli2',fb_res_cli2['result'], fb_res_cli2['message'], len(fb_res_cli2['epidata']))
     #print('fb_cli3',fb_res_cli3['result'], fb_res_cli3['message'], len(fb_res_cli3['epidata']))
     print('fb_wcli4',fb_res_cli4['result'], fb_res_cli4['message'], len(fb_res_cli4['epidata']))
-    print('fb_wcli5',fb_res_cli5['result'], fb_res_cli5['message'], len(fb_res_cli5['epidata']))
-    print('fb_wcli6',fb_res_cli6['result'], fb_res_cli6['message'], len(fb_res_cli6['epidata']))
-    print('fb_wcli8',fb_res_cli8['result'], fb_res_cli8['message'], len(fb_res_cli8['epidata']))
-    print('fb_wcli9',fb_res_cli9['result'], fb_res_cli9['message'], len(fb_res_cli9['epidata']))
+    print('fb_wcli5',fb_res_cli9['result'], fb_res_cli9['message'], len(fb_res_cli9['epidata']))
+    print('fb_wcli6',fb_res_cli10['result'], fb_res_cli10['message'], len(fb_res_cli10['epidata']))
+    print('fb_wcli8',fb_res_cli11['result'], fb_res_cli11['message'], len(fb_res_cli11['epidata']))
+    print('fb_wcli9',fb_res_cli12['result'], fb_res_cli12['message'], len(fb_res_cli12['epidata']))
     
-    print('google_cli',google_res_cli['result'], google_res_cli['message'], len(google_res_cli['epidata']))
+    #print('google_cli',google_res_cli['result'], google_res_cli['message'], len(google_res_cli['epidata']))
     
     #print(fb_res_wli['result'], fb_res_wli['message'], len(fb_res_wli['epidata']))
     
@@ -226,24 +777,24 @@ def read_delphi_fb_google_survey(state_index,epiweek_date,start_week,end_week):
     #print('fb_wili3',fb_res_wli3['result'], fb_res_wli3['message'], len(fb_res_wli3['epidata']))
     print('fb_wili4',fb_res_wli4['result'], fb_res_wli4['message'], len(fb_res_wli4['epidata']))
     print('fb_wili5',fb_res_wli5['result'], fb_res_wli5['message'], len(fb_res_wli5['epidata']))
-    print('fb_wili6',fb_res_wli6['result'], fb_res_wli6['message'], len(fb_res_wli6['epidata']))
-    print('fb_wili8',fb_res_wli7['result'], fb_res_wli8['message'], len(fb_res_wli8['epidata']))
-    print('fb_wili9',fb_res_wli8['result'], fb_res_wli9['message'], len(fb_res_wli9['epidata']))
+    print('fb_wili10',fb_res_wli10['result'], fb_res_wli10['message'], len(fb_res_wli10['epidata']))
+    print('fb_wili11',fb_res_wli11['result'], fb_res_wli11['message'], len(fb_res_wli11['epidata']))
+    print('fb_wili12',fb_res_wli12['result'], fb_res_wli12['message'], len(fb_res_wli12['epidata']))
     
     print('fb_wcli len',len(fb_res_cli))
     print('fb_wli len',len(fb_res_wli))
     #'''
     state_names=list(state_index.keys())
-    cols=['fb_survey_wcli','google_survey_cli','fb_survey_wili']
+    cols=['fb_survey_wcli','fb_survey_wili']
     week_cases={}
     for c in cols:
         week_cases[c]=np.zeros((len(state_names),len(epiweek_date)))
     #'''
     #week_cases[cols[0]]=read_survey_epidata(cols[0],fb_res_cli['epidata'],state_index,state_names,epiweek_date)
-    week_cases[cols[0]]=read_survey_epidata(cols[0],fb_res_cli,state_index,state_names,epiweek_date)
-    week_cases[cols[1]]=read_survey_epidata(cols[1],google_res_cli['epidata'],state_index,state_names,epiweek_date)
+    week_cases[cols[0]]=read_survey_epidata(cols[0],fb_res_cli_final,state_index,state_names,epiweek_date)
+    #week_cases[cols[1]]=read_survey_epidata(cols[1],google_res_cli['epidata'],state_index,state_names,epiweek_date)
     #week_cases[cols[2]]=read_survey_epidata(cols[2],fb_res_wli['epidata'],state_index,state_names,epiweek_date)
-    week_cases[cols[2]]=read_survey_epidata(cols[2],fb_res_wli,state_index,state_names,epiweek_date)
+    week_cases[cols[1]]=read_survey_epidata(cols[1],fb_res_wli_final,state_index,state_names,epiweek_date)
     #'''
 
     unit_test(week_cases,cols,epiweek_date,state_index,"unit_test/fb-google-survey.csv")
@@ -251,9 +802,10 @@ def read_delphi_fb_google_survey(state_index,epiweek_date,start_week,end_week):
     
 
 
-# In[31]:
+# In[10]:
 
 
+#The 
 def read_fips_code(state_names,fips_path,abbv_to_code=True):
     #if abbv_to_code=True; read fips with given state code (state_names)
     #if abbv_to_code=False; read state code with given state name (state_names)
@@ -403,7 +955,7 @@ def find_week_index(week,cur_date,date_string=True,strsplit='-'):
     return -1
 
 
-# In[32]:
+# In[11]:
 
 
 def read_apple_mobility_per_date(inputdir,epiweek_date,state_index,dic_names_to_abbv,start_week,end_week):
@@ -432,7 +984,7 @@ def read_apple_mobility_per_date(inputdir,epiweek_date,state_index,dic_names_to_
     return apple_dic,['apple_mobility']
 
 
-# In[33]:
+# In[12]:
 
 
 def get_epiweek_list(week_start,week_end,year):
@@ -453,55 +1005,67 @@ def get_epiweek_list(week_start,week_end,year):
      
     return week_list,week_edate_list  
 
-
+def convert_to_epiweek(x):
+    return Week.fromdate(x)
 def read_mobility(inputdir,epiweek_date,end_week,MISSING_TOKEN=0):
     data=pd.read_csv(inputdir+"Global_Mobility_Report.csv",low_memory=False)
     data=data[data['country_region_code']=='US']
     data=data.drop(data[data['sub_region_1'] == 'Hawaii'].index)
+    data= data[pd.isnull(data['sub_region_2'])]
     data=data.drop(columns=['sub_region_2'])
-
+    
     state_names=data['sub_region_1'].drop_duplicates().values
     state_names[0]='X' #changing nan to US national X
     cols=data.columns
+    print(cols)
     cols=list(cols[8:])
+    print(cols)
+    
+    data['sub_region_1'] = data['sub_region_1'].fillna('X')
+    data['date'] = pd.to_datetime(data['date'])
+    data['epiweek'] = data['date'].dt.date.apply(convert_to_epiweek)
+    epiweek_data = data.groupby(['epiweek', 'sub_region_1'], as_index=False).mean()
     dic_names_to_abbv=read_fips_code(state_names,inputdir,abbv_to_code=False)
+    print(dic_names_to_abbv)
     
     state_index = {dic_names_to_abbv[state_names[i]]: i for i in range(len(state_names))} 
+    print(state_index)
+    
     #data[cols] = data[cols].fillna(MISSING_TOKEN)
     num_states=len(state_names)
     #print(cols)
     week_cases={}
+    week_cases_check = {}
     for c in cols:
         week_cases[c]=np.empty((num_states,len(epiweek_date)))
         week_cases[c][:][:]=np.nan
+        week_cases_check[c] = np.full((num_states,len(epiweek_date)), False)
         '''
         week_cases[c]=np.zeros((num_states,len(epiweek_date)))
         if (len(epiweek_date)-end_week)!=0:
             week_cases[c][:][end_week]=np.nan
         '''
     print(cols)
+    
     #'''
     for ix,row in data.iterrows():
-        if type(row['sub_region_1']) is float:
-            state_id=0
-        else:
-            state_id=state_index[dic_names_to_abbv[row['sub_region_1']]]
-        week_id=find_week_index(epiweek_date,str(row['date']),date_string=False)
+        state_id=state_index[dic_names_to_abbv[row['sub_region_1']]]
+        week_id=find_week_index(epiweek_date,str(row['date'].date()),date_string=False)
         if week_id!=-1:
             for c in cols:
-                if pd.isnull(row[c])==False:
-                    if np.isnan(week_cases[c][state_id][week_id]):
-                            week_cases[c][state_id][week_id]=0
-                    week_cases[c][state_id][week_id]+=row[c]
-    
+                if not pd.isnull(row[c]) and not week_cases_check[c][state_id][week_id]: 
+                    value = epiweek_data[epiweek_data['epiweek'] == convert_to_epiweek(row['date'])] 
+                    value = value[value['sub_region_1'] == row['sub_region_1']]
+                    for i in value[c]: 
+                        week_cases[c][state_id][week_id] = i
+                    week_cases_check[c][state_id][week_id] = True
     unit_test(week_cases,cols,epiweek_date,state_index,"unit_test/google-mobility.csv")
     #'''
     
-    return week_cases,cols,state_index,dic_names_to_abbv
-    
+    return week_cases,cols,state_index,dic_names_to_abbv    
 
 
-# In[34]:
+# In[13]:
 
 
 def read_vaccine_doses(inputdir,epiweek_date,state_index,dic_names_to_abbv,last_date):
@@ -513,7 +1077,8 @@ def read_vaccine_doses(inputdir,epiweek_date,state_index,dic_names_to_abbv,last_
     cols=['Stage_One_Doses','Stage_Two_Doses']
     week_cases={}
     for c in cols:
-        week_cases[c]=np.zeros((len(state_names),len(epiweek_date)))
+        week_cases[c]=np.full((len(state_names),len(epiweek_date)), np.nan)
+
     
     for ix,row in data.iterrows():
         #print(len(epiweek_date),row['Date'],last_date)
@@ -526,7 +1091,9 @@ def read_vaccine_doses(inputdir,epiweek_date,state_index,dic_names_to_abbv,last_
                 if pd.isnull(row[c])==False:
                     val=float(row[c])
                 elif w_idx>0:
-                    val=week_cases[c][state_id][w_idx-1]               
+                    val=week_cases[c][state_id][w_idx-1] 
+                if np.isnan(week_cases[c][0][w_idx]): 
+                    week_cases[c][0][w_idx] = 0
                 week_cases[c][state_id][w_idx]=val
                 week_cases[c][0][w_idx]+=val
     
@@ -536,7 +1103,7 @@ def read_vaccine_doses(inputdir,epiweek_date,state_index,dic_names_to_abbv,last_
         
 
 
-# In[35]:
+# In[14]:
 
 
 def read_apple_mobility(inputdir,epiweek_date,state_index,dic_names_to_abbv,start_week,end_week):
@@ -559,7 +1126,7 @@ def read_apple_mobility(inputdir,epiweek_date,state_index,dic_names_to_abbv,star
                     if w_idx!=-1 and pd.isnull(row[d])==False:
                         if np.isnan(week_cases[state_id][w_idx]):
                             week_cases[state_id][w_idx]=0
-                        week_cases[state_id][w_idx]+=float(row[d])
+                        week_cases[state_id][w_idx]+=float(row[d])/7
     apple_dic={}
     apple_dic['apple_mobility']=week_cases    
     
@@ -568,7 +1135,7 @@ def read_apple_mobility(inputdir,epiweek_date,state_index,dic_names_to_abbv,star
     return apple_dic,['apple_mobility']
 
 
-# In[36]:
+# In[15]:
 
 
 def read_dex(inputdir,epiweek_date,state_index,start_week,end_week):
@@ -606,7 +1173,7 @@ def read_dex(inputdir,epiweek_date,state_index,start_week,end_week):
     return week_cases,cols
 
 
-# In[37]:
+# In[16]:
 
 
 def read_emergency(inputdir,epiweek_date,state_index,start_week,end_week):
@@ -615,7 +1182,7 @@ def read_emergency(inputdir,epiweek_date,state_index,start_week,end_week):
     data=pd.read_csv(inputdir+"covid-like-illness-v202040.csv")
     cols=['Number of Facilities Reporting','CLI Percent of Total Visits']
     print(data.columns)
-    data=data[data['Week']>=start_week]
+    data=data[data['week']>=start_week]
     state_names=list(state_index.keys())
     week_cases={}
     for c in cols:
@@ -645,7 +1212,7 @@ def read_emergency(inputdir,epiweek_date,state_index,start_week,end_week):
     print(list2)
     for ix,row in data.iterrows():
         reg_id=region_map[row['region']]
-        week=str(row['Week'])
+        week=str(row['week'])
         w_idx=int(week[4:])-1
         year=int(week[:4])
         if year>2020:
@@ -664,7 +1231,7 @@ def read_emergency(inputdir,epiweek_date,state_index,start_week,end_week):
     
 
 
-# In[38]:
+# In[17]:
 
 
 def read_kinsa(inputdir,epiweek_date,state_index,start_week,end_week,isregion=False):
@@ -687,7 +1254,7 @@ def read_kinsa(inputdir,epiweek_date,state_index,start_week,end_week,isregion=Fa
     return kinsa_dic,['kinsa_cases']
 
 
-# In[39]:
+# In[18]:
 
 
 def read_iqvia(inputdir,epiweek_date,state_index,start_week,end_week):
@@ -710,7 +1277,7 @@ def read_iqvia(inputdir,epiweek_date,state_index,start_week,end_week):
     return week_cases,cols
 
 
-# In[53]:
+# In[19]:
 
 
 def read_cdc_hosp(inputdir,epiweek_date,state_index,end_week):
@@ -718,6 +1285,8 @@ def read_cdc_hosp(inputdir,epiweek_date,state_index,end_week):
     #data=pd.read_csv(inputdir+"reported_hospital_timeseries.csv")
     
     #data=data.fillna(0)
+    state_index['PR'] = 51
+    state_index['VI'] = 52
     state_names=list(state_index.keys())
     week_cases={}
     flu_week_cases={}
@@ -798,11 +1367,12 @@ def read_cdc_hosp(inputdir,epiweek_date,state_index,end_week):
             #week_cases[c][s][-2]=np.nan
     '''
     unit_test(week_cases,cols,epiweek_date,state_index,"unit_test/cdc_hosp.csv") 
-    
+    del state_index['PR']
+    del state_index['VI']
     return week_cases,cols,flu_week_cases,flu_cols
 
 
-# In[54]:
+# In[20]:
 
 
 def read_covidnet(data_covidnet,week_len,start,end,step,weekly_rate,region): #region='X'
@@ -823,23 +1393,31 @@ def read_covidnet(data_covidnet,week_len,start,end,step,weekly_rate,region): #re
                     else:
                         covid[mmr_week-10+step]=float(row[weekly_rate])
             elif year==2021:
-                if mmr_week<=end:
+                if mmr_week<=52:
                     if region=='Entire Network':
                         if row['NETWORK']=='COVID-NET':
                             covid[43+step+mmr_week]=float(row[weekly_rate])
                     else:
                         covid[43+step+mmr_week]=float(row[weekly_rate])
+            elif year==2022:
+                if mmr_week<=end:
+                    if region=='Entire Network':
+                        if row['NETWORK']=='COVID-NET':
+                            covid[95+step+mmr_week]=float(row[weekly_rate])
+                    else:
+                        covid[95+step+mmr_week]=float(row[weekly_rate])
                 
     return covid
 
 def read_covidnet_data(inputdir,epiweek_date,state_index,dic_names_to_abbv,start_week,end_week,step):
     #data_covidnet=pd.read_csv(inputdir+"COVID-NET_Processed.csv",delimiter=',')
     if date.today().weekday() != 6:
-        week_num = date.today().strftime("%U")
+        week_num = (date.today()-timedelta(days=2)).strftime("%U")
         year_week_num = "2022" + week_num
     else:
         week_num = (date.today()-timedelta(days=1)).strftime("%U")
         year_week_num = "2022" + week_num
+    print(year_week_num)
     file_name = "COVID-NET_v"+year_week_num + ".csv"
     data_covidnet=pd.read_csv(inputdir+file_name,delimiter=',')
     columns=list(data_covidnet.columns)
@@ -870,7 +1448,7 @@ def read_covidnet_data(inputdir,epiweek_date,state_index,dic_names_to_abbv,start
     return covidnet_dic,['covidnet']
 
 
-# In[55]:
+# In[21]:
 
 
 def hosp_negative_total_data(inputdir,epiweek_date,state_index):
@@ -899,7 +1477,49 @@ def hosp_negative_total_data(inputdir,epiweek_date,state_index):
     return week_cases,cols
 
 
-# In[56]:
+# In[22]:
+
+
+def hosp_negative_total_data_test(inputdir,epiweek_date,state_index):
+    data_hosp=pd.read_csv(inputdir+"COVID-19_PCR_Testing_Time_Series.csv",delimiter=',')
+    state_names=list(state_index.keys())
+    week_cases={}
+    cols=['cdc_negativeIncr','cdc_positiveIncr', 'cdc_total_resultsIncr']
+    for c in cols:
+        week_cases[c]=np.full((len(state_names),len(epiweek_date)), np.nan)
+    
+    
+    for index,row in data_hosp.iterrows():
+        if row['state'] in state_index.keys():
+            if row['overall_outcome']=='Negative':
+                test_type = cols[0]
+            elif row['overall_outcome'] == 'Positive': 
+                test_type = cols[1]
+            else:
+                test_type = "NA"
+            state_id=state_index[row['state']]
+            date=row['date']
+            week_id=find_week_index(epiweek_date,date.replace('/','-'),date_string=False)
+            if test_type != "NA": 
+#                 print(week_cases)[state_id][week_id]
+                if np.isnan(week_cases[test_type][state_id][week_id]): 
+                    week_cases[test_type][state_id][week_id] = 0
+                if np.isnan(week_cases[test_type][0][week_id]): 
+                    week_cases[test_type][0][week_id] = 0
+                week_cases[test_type][state_id][week_id]+=float(row['new_results_reported'])
+                week_cases[test_type][0][week_id]+=float(row['new_results_reported'])
+            if np.isnan(week_cases[cols[2]][state_id][week_id]): 
+                week_cases[cols[2]][state_id][week_id] = 0
+            if np.isnan(week_cases[cols[2]][0][week_id]): 
+                week_cases[cols[2]][0][week_id] = 0
+            week_cases[cols[2]][state_id][week_id]+=float(row['new_results_reported'])
+            week_cases[cols[2]][0][week_id]+=float(row['new_results_reported'])
+    unit_test(week_cases,cols,epiweek_date,state_index,"unit_test/hosp_neg_ttl.csv") 
+    
+    return week_cases,cols
+
+
+# In[23]:
 
 
 def impute_columns(orig_col,epiweek_date):
@@ -916,7 +1536,7 @@ def impute_columns(orig_col,epiweek_date):
     return imputed_col
 
 
-# In[57]:
+# In[24]:
 
 
 def hosp_cases_nat_state(data_national,data_state,epiweek_date,week_save,state_index,cols,state_error,last_date):
@@ -1033,7 +1653,7 @@ def hosp_cases_nat_state(data_national,data_state,epiweek_date,week_save,state_i
     return week_cases
 
 
-# In[58]:
+# In[25]:
 
 
 def read_hospitalization(input_national,input_state,epiweek_date,week_save,state_index,
@@ -1074,7 +1694,7 @@ def read_hospitalization(input_national,input_state,epiweek_date,week_save,state
     return week_cases,cols_for_hosp
 
 
-# In[59]:
+# In[26]:
 
 
 def read_excess_death(inputdir,epiweek_date,state_index,dic_names_to_abbv,start_week,end_week,this_month,last_date):
@@ -1121,7 +1741,7 @@ def read_excess_death(inputdir,epiweek_date,state_index,dic_names_to_abbv,start_
     return week_cases,cols_death
 
 
-# In[60]:
+# In[27]:
 
 
 def read_jhu_cases(inputdir,epiweek_date,state_index,dic_names_to_abbv):
@@ -1137,10 +1757,12 @@ def read_jhu_cases(inputdir,epiweek_date,state_index,dic_names_to_abbv):
     week_cases={}
     cols=['positiveIncr_cumulative','positiveIncr']
     for c in cols:
-        week_cases[c]=np.zeros((len(state_names),len(epiweek_date)))
+        week_cases[c]=np.full((len(state_names),len(epiweek_date)), np.nan)
     
-    for ix, row in data.iterrows():
-        name=row['Province_State']
+    data2 = data.groupby(['Province_State']).sum()
+    
+    for ix, row in data2.iterrows():
+        name=ix
         if name in state_names:
             state_id=state_index[dic_names_to_abbv[name]]
             for date in dates_list:
@@ -1149,6 +1771,10 @@ def read_jhu_cases(inputdir,epiweek_date,state_index,dic_names_to_abbv):
                  #   print(w_idx)
                 if w_idx!=-1:
                     #print(name,date,row[date])
+                    if np.isnan(week_cases[cols[0]][state_id][w_idx]): 
+                        week_cases[cols[0]][state_id][w_idx] = 0
+                    if np.isnan(week_cases[cols[0]][0][w_idx]): 
+                        week_cases[cols[0]][0][w_idx] = 0
                     week_cases[cols[0]][state_id][w_idx]+=int(row[date])
                     week_cases[cols[0]][0][w_idx]+=int(row[date])
         elif name not in not_added_rows: #if not state_names still adding them for national
@@ -1156,13 +1782,22 @@ def read_jhu_cases(inputdir,epiweek_date,state_index,dic_names_to_abbv):
             for date in dates_list:
                 w_idx=get_current_week(epiweek_date,date,dates_list[-1])
                 if w_idx!=-1:
+                    if np.isnan(week_cases[cols[0]][0][w_idx]): 
+                        week_cases[cols[0]][0][w_idx] = 0
                     week_cases[cols[0]][0][w_idx]+=int(row[date])
     
     
     #count incidence for the national+states
     for state_id in range(len(state_names)):
-        week_cases[cols[1]][state_id][0]=int(week_cases[cols[0]][state_id][0])
-        for w_idx in range(1,len(epiweek_date)):
+        if state_id == 51: 
+            continue
+        index = 0
+        while np.isnan(week_cases[cols[0]][state_id][index]):
+            index += 1
+        week_cases[cols[1]][state_id][index]=int(week_cases[cols[0]][state_id][index])
+        for w_idx in range(index + 1,len(epiweek_date)):
+            if np.isnan(week_cases[cols[0]][state_id][w_idx]): 
+                continue
             week_cases[cols[1]][state_id][w_idx]=int(week_cases[cols[0]][state_id][w_idx])-int(week_cases[cols[0]][state_id][w_idx-1])
              
     
@@ -1170,7 +1805,7 @@ def read_jhu_cases(inputdir,epiweek_date,state_index,dic_names_to_abbv):
     return week_cases,cols
 
 
-# In[61]:
+# In[28]:
 
 
 def read_jhu_death(inputdir,epiweek_date,state_index,dic_names_to_abbv,start_week=None,end_week=None):
@@ -1186,10 +1821,11 @@ def read_jhu_death(inputdir,epiweek_date,state_index,dic_names_to_abbv,start_wee
     week_cases={}
     cols=['death_jhu_cumulative','death_jhu_incidence']
     for c in cols:
-        week_cases[c]=np.zeros((len(state_names),len(epiweek_date)))
+        week_cases[c]=np.full((len(state_names),len(epiweek_date)), np.nan)
     
-    for ix, row in data.iterrows():
-        name=row['Province_State']
+    data2 = data.groupby(['Province_State']).sum()
+    for ix, row in data2.iterrows():
+        name=ix
         if name in state_names:
             state_id=state_index[dic_names_to_abbv[name]]
             for date in dates_list:
@@ -1198,6 +1834,10 @@ def read_jhu_death(inputdir,epiweek_date,state_index,dic_names_to_abbv,start_wee
                  #   print(w_idx)
                 if w_idx!=-1:
                     #print(name,date,row[date])
+                    if np.isnan(week_cases[cols[0]][state_id][w_idx]): 
+                        week_cases[cols[0]][state_id][w_idx] = 0
+                    if np.isnan(week_cases[cols[0]][0][w_idx]): 
+                        week_cases[cols[0]][0][w_idx] = 0
                     week_cases[cols[0]][state_id][w_idx]+=int(row[date])
                     week_cases[cols[0]][0][w_idx]+=int(row[date])
         elif name not in not_added_rows: #if not state_names still adding them for national
@@ -1205,21 +1845,29 @@ def read_jhu_death(inputdir,epiweek_date,state_index,dic_names_to_abbv,start_wee
             for date in dates_list:
                 w_idx=get_current_week(epiweek_date,date,dates_list[-1])
                 if w_idx!=-1:
+                    if np.isnan(week_cases[cols[0]][0][w_idx]): 
+                        week_cases[cols[0]][0][w_idx] = 0
                     week_cases[cols[0]][0][w_idx]+=int(row[date])
     
     
     #count incidence for the national+states
     for state_id in range(len(state_names)):
-        week_cases[cols[1]][state_id][0]=int(week_cases[cols[0]][state_id][0])
-        for w_idx in range(1,len(epiweek_date)):
-            week_cases[cols[1]][state_id][w_idx]=int(week_cases[cols[0]][state_id][w_idx])-int(week_cases[cols[0]][state_id][w_idx-1])
+        if state_id == 51 or state_id == 52: 
+            continue 
+        index = 0
+        while np.isnan(week_cases[cols[0]][state_id][index]):
+            index += 1
+        week_cases[cols[1]][state_id][index]=int(week_cases[cols[0]][state_id][index])
+        for w_idx in range(index + 1,len(epiweek_date)):
+            if np.isnan(week_cases[cols[0]][state_id][w_idx]) == False and np.isnan(week_cases[cols[0]][state_id][w_idx-1]) == False: 
+                week_cases[cols[1]][state_id][w_idx]=int(week_cases[cols[0]][state_id][w_idx])-int(week_cases[cols[0]][state_id][w_idx-1])
              
     
     unit_test(week_cases,cols,epiweek_date,state_index,"unit_test/jhu-death.csv")
     return week_cases,cols
 
 
-# In[62]:
+# In[29]:
 
 
 def region_level_cases(inputdir,week_state,state_index,epiweek_date,cols, is_covidnet=False):
@@ -1284,7 +1932,7 @@ def region_level_cases(inputdir,week_state,state_index,epiweek_date,cols, is_cov
     return week_hhs
 
 
-# In[63]:
+# In[30]:
 
 
 def merge_data_region(mobility,kinsadir,iqvia,covidnet,hosp,cols_m,cols_k,cols_q,cols_net,cols_hosp,epiweek,
@@ -1332,19 +1980,19 @@ def merge_data_region(mobility,kinsadir,iqvia,covidnet,hosp,cols_m,cols_k,cols_q
     
 
 
-# In[64]:
+# In[31]:
 
 
-def merge_data_state(mobility,apple,vacc,vac_delphi,cdc_hosp,flu_hosp,dex,kinsa,covidnet,hosp,excess,jhu,survey,em_visit,jhu_case,hosp_new_res,
-                     cols_m,cols_a,cols_vacc,cols_vac_delphi,cols_cdc,cols_flu,cols_d,cols_k,cols_net,
-                     cols_hosp,cols_excess,cols_jhu,cols_survey,cols_v,cols_jhu_case,cols_hosp_new_res,
+# produces the output file from all the columns generated
+def merge_data_state(mobility,apple,vacc,vac_delphi,cdc_hosp,flu_hosp,covidnet,excess,jhu,survey,jhu_case,hosp_new_res,
+                     cols_m,cols_a,cols_vacc,cols_vac_delphi,cols_cdc,cols_flu,cols_net,cols_excess,cols_jhu,cols_survey,cols_jhu_case,cols_hosp_new_res,
                      state_fips,epiweek,epiweek_date,region_names,outputdir,outfilename):
     
     cols_common=['date','epiweek','region','fips']
     #all_cols=cols_common+cols_m+cols_a+cols_d+cols_k+cols_net+cols_hosp+cols_excess+cols_jhu+cols_survey+cols_v
     #all_cols=cols_common+cols_m+cols_a+cols_cdc+cols_d+cols_k+cols_q+cols_net+cols_hosp+cols_excess+cols_jhu+cols_survey+cols_v
-    all_cols=cols_common+cols_m+cols_a+cols_cdc+cols_flu+cols_d+cols_vacc+cols_vac_delphi+cols_k+cols_net+cols_hosp+cols_excess+cols_jhu+cols_survey+cols_v+cols_jhu_case+cols_hosp_new_res
-    
+    #all_cols=cols_common+cols_m+cols_a+cols_cdc+cols_flu+cols_d+cols_vacc+cols_vac_delphi+cols_k+cols_net+cols_hosp+cols_excess+cols_jhu+cols_survey+cols_jhu_case+cols_hosp_new_res
+    all_cols=cols_common+cols_m+cols_a+cols_cdc+cols_flu+cols_vacc+cols_vac_delphi+cols_net+cols_excess+cols_jhu+cols_survey+cols_jhu_case+cols_hosp_new_res
     print(all_cols)
     final_data=pd.DataFrame(columns=all_cols)
     for reg in range(len(region_names)):
@@ -1361,6 +2009,80 @@ def merge_data_state(mobility,apple,vacc,vac_delphi,cdc_hosp,flu_hosp,dex,kinsa,
             temp_data[c]=cdc_hosp[c][reg][:]
         for c in cols_flu:
             temp_data[c]=flu_hosp[c][reg][:]
+        #for c in cols_d:
+        #    temp_data[c]=dex[c][reg][:]
+        for c in cols_vacc:
+            temp_data[c]=vacc[c][reg][:]
+        for c in cols_vacc_delphi:
+            temp_data[c]=vacc_delphi[c][reg][:]
+        #for c in cols_k:
+         #   temp_data[c]=kinsa[c][reg][:]
+        #for c in cols_q:
+         #   temp_data[c]=iqvia[c][reg][:]
+        for c in cols_net:
+            temp_data[c]=covidnet[c][reg][:]
+        #for c in cols_hosp:
+        #    temp_data[c]=hosp[c][reg][:]
+        for c in cols_excess:
+            temp_data[c]=excess[c][reg][:]
+        for c in cols_jhu:
+            temp_data[c]=jhu[c][reg][:]
+        for c in cols_survey:
+            temp_data[c]=survey[c][reg][:]
+        #for c in cols_v:
+        #    temp_data[c]=em_visit[c][reg][:]
+        for c in cols_jhu_case:
+            temp_data[c]=jhu_case[c][reg][:]
+        for c in cols_hosp_new_res:
+            temp_data[c]=hosp_new_res[c][reg][:]
+        
+        temp_data=temp_data[all_cols]
+        final_data=final_data.append(temp_data,ignore_index=True)
+    
+    final_data=final_data[all_cols]
+    print(final_data.shape)
+    final_data.to_csv(outputdir+outfilename,index=False)
+    
+    print('FINISHED....')
+            
+
+
+# In[32]:
+
+
+def merge_data_state_test(mobility,cdc_hosp,flu_hosp,
+                     cols_m,cols_cdc,cols_flu,
+                     state_fips,epiweek,epiweek_date,region_names,outputdir,outfilename):
+    
+    cols_common=['date','epiweek','region','fips']
+    #all_cols=cols_common+cols_m+cols_a+cols_d+cols_k+cols_net+cols_hosp+cols_excess+cols_jhu+cols_survey+cols_v
+    #all_cols=cols_common+cols_m+cols_a+cols_cdc+cols_d+cols_k+cols_q+cols_net+cols_hosp+cols_excess+cols_jhu+cols_survey+cols_v
+    all_cols=cols_common+cols_m+cols_cdc+cols_flu
+    
+    print(all_cols)
+    final_data=pd.DataFrame(columns=all_cols)
+    for reg in range(len(region_names)):
+        temp_data=pd.DataFrame(columns=all_cols)
+        temp_data['date']=epiweek_date
+        temp_data['epiweek']=epiweek
+        temp_data['region']=[region_names[reg]]*len(epiweek_date)
+        temp_data['fips']=[state_fips[region_names[reg]]]*len(epiweek_date)
+        for c in cols_m:
+            temp_data[c]=mobility[c][reg][:]
+        """
+        for c in cols_a:
+            temp_data[c]=apple[c][reg][:]"""
+        for c in cols_cdc:
+            if reg == 0: 
+                cdc_hosp[c][reg][0:14] = np.nan
+                print(cdc_hosp[c][reg][0:14])
+            temp_data[c]=cdc_hosp[c][reg][:]
+        for c in cols_flu:
+            if reg == 0: 
+                flu_hosp[c][reg][0:41] = np.nan
+                print(flu_hosp[c][reg][0:41])
+            temp_data[c]=flu_hosp[c][reg][:]
+        """
         for c in cols_d:
             temp_data[c]=dex[c][reg][:]
         for c in cols_vacc:
@@ -1381,12 +2103,12 @@ def merge_data_state(mobility,apple,vacc,vac_delphi,cdc_hosp,flu_hosp,dex,kinsa,
             temp_data[c]=jhu[c][reg][:]
         for c in cols_survey:
             temp_data[c]=survey[c][reg][:]
-        for c in cols_v:
-            temp_data[c]=em_visit[c][reg][:]
+        #for c in cols_v:
+        #    temp_data[c]=em_visit[c][reg][:]
         for c in cols_jhu_case:
             temp_data[c]=jhu_case[c][reg][:]
         for c in cols_hosp_new_res:
-            temp_data[c]=hosp_new_res[c][reg][:]
+            temp_data[c]=hosp_new_res[c][reg][:]"""
         
         temp_data=temp_data[all_cols]
         final_data=final_data.append(temp_data,ignore_index=True)
@@ -1396,10 +2118,9 @@ def merge_data_state(mobility,apple,vacc,vac_delphi,cdc_hosp,flu_hosp,dex,kinsa,
     final_data.to_csv(outputdir+outfilename,index=False)
     
     print('FINISHED....')
-            
 
 
-# In[65]:
+# In[34]:
 
 
 '''
@@ -1439,13 +2160,18 @@ def merge_data_state(mobility,apple,vacc,vac_delphi,cdc_hosp,flu_hosp,dex,kinsa,
    before calling the method
 
 '''
+
+
 import copy
 if date.today().weekday() != 6:
-    week_num = date.today().strftime("%U")
-    year_week_num = "2022" + week_num
+    week_num = (date.today()-timedelta(2)).strftime("%U")
+    year_week_num = "2022"  + week_num
     print(year_week_num)
     week_end_date = (date.today() +timedelta((5-date.today().weekday()) % 7 )).strftime('%Y-%m-%d')
+    week_end_date = (date.today() - timedelta(2)).strftime('%Y-%m-%d')
     week_end_string = (date.today() + timedelta((5-date.today().weekday()) % 7 )).strftime('%Y%m%d')
+    week_end_string = (date.today() - timedelta(2)).strftime('%Y%m%d')
+
 else:
     week_num = (date.today()-timedelta(days=1)).strftime("%U")
     year_week_num = "2022" + week_num
@@ -1484,11 +2210,12 @@ dic_names_to_abbv['United States']='X'
 print(len(state_index.keys()))
 #print(state_index)
 
+
 print('JHU-cases')
 jhu_cases,cols_jhu_case=read_jhu_cases(data_path,epiweek_date,state_index,dic_names_to_abbv)
 
 print('hosp-neg-total result')
-hosp_new_res,cols_hosp_new_res=hosp_negative_total_data(data_path,epiweek_date,state_index)
+hosp_new_res,cols_hosp_new_res=hosp_negative_total_data_test(data_path,epiweek_date,state_index)
 
 print('Vaccine dose')
 last_date=week_end_date
@@ -1497,31 +2224,33 @@ vacc,cols_vacc=read_vaccine_doses(data_path,epiweek_date,state_index,dic_names_t
 print('delphi vaccine survey')
 start_week=20210101
 end_week=int(week_end_string)  #yyyymmdd
-
-vacc_delphi,cols_vacc_delphi=read_delphi_vaccine(state_index,epiweek_date,start_week,end_week)
+print(end_week)
+vacc_delphi,cols_vacc_delphi=read_delphi_vaccine_test_two(state_index,epiweek_date,start_week,end_week)
 
 ### PROCESSING FB-GOOGLE ####
 ### INPUT: start_week, end_week; start_week does not matter as both survey starts from 20200401, 
 ###  but always update end_week###
+
 print('FB-GOOGLE')
 start_week=20200307
 end_week=int(week_end_string) #yyyymmdd
-survey,cols_survey=read_delphi_fb_google_survey(state_index,epiweek_date,start_week,end_week)
+survey,cols_survey=read_delphi_fb_google_survey_test(state_index,epiweek_date,start_week,end_week)
 
 
 print('CDC hospitalization')
 end_week=int(week_num) #2021
 cdc_hosp,cols_cdc,flu_hosp,cols_flu=read_cdc_hosp(data_path,epiweek_date,state_index,end_week)
+print(flu_hosp)
 
 ### PROCESSING APPLE MOBILITY per date for Berkely guys####
 #read_apple_mobility_per_date(data_path,epiweek_date,state_index,dic_names_to_abbv,start_week_m,end_week_m)
 
 ### PROCESSING APPLE MOBILITY ####
 ### INPUT: START_WEEK:1,END_WEEK: the last epiweek this csv file contains  ####
+
 print('apple mobility')
 end_week_m=int(week_num)
 apple_mobility,cols_a=read_apple_mobility(data_path,epiweek_date,state_index,dic_names_to_abbv,start_week_m,end_week_m)
-
 
 ### PROCESSING COVIDNET ####
 ### INPUT: START, END_WEEK: have 1 weeks lag data, same as IQVIA; STEP: TILL which index covidnet starts###
@@ -1541,6 +2270,7 @@ this_month=1
 last_date=week_end_date #yyyy-mm-dd change to original epiweek date if pulled after Sat, else keep it as today's date
 excess_death,cols_excess=read_excess_death(data_path,epiweek_date,state_index,dic_names_to_abbv,start_week_e,end_week_e,this_month,last_date)
 
+
 ### PROCESSING jhu death ####
 print('JHU')
 jhu_death,cols_jhu=read_jhu_death(data_path,epiweek_date,state_index,dic_names_to_abbv)
@@ -1550,6 +2280,7 @@ jhu_death,cols_jhu=read_jhu_death(data_path,epiweek_date,state_index,dic_names_t
 
 ### PROCESSING Covid exposure indices on income, race,etc. ####
 ### INPUT: END_WEEK: the last epiweek this csv file contains  ####
+"""
 print('covid exposure index:dex')
 end_week_dex=16
 dex,cols_d=read_dex(data_path,epiweek_date,state_index,start_week_m,end_week=end_week_dex)
@@ -1566,7 +2297,7 @@ last_date='20210307' #yyymmdd:change to original epiweek date if pulled after Sa
 #states needs hosp current  
 state_error=['CA','DC','TX','IL','LA','PA','MI','MO','NC','NV','DE'] #'NJ', 'WA', 'NE'
 data_hosp,cols_hosp=read_hospitalization(data_path,data_path,epiweek_date,week_save,state_index,
-                                      last_date,state_error)
+                                      last_date,state_error)"""
 
 # ## PROCESSING IQVIA ####
 # ## INPUT: START, END_WEEK: have 2 weeks lag data###
@@ -1574,13 +2305,16 @@ data_hosp,cols_hosp=read_hospitalization(data_path,data_path,epiweek_date,week_s
 # change start, end week based on data and epiweek_date. current data has value since epiweek 10-17
 # start_week_q=1
 # end_week_q=33 #if this data is 1 week lag, then epiweek-1, else epiweek
-# iqvia_state,cols_q=read_iqvia(data_path,epiweek_date,state_index,start_week_q,end_week_q)
+# iqvia_state,cols_q=read_iqvia(data_path,epiweek_date,state_index,start_week_q,end_week_q)"""
 
 ## PROCESSING Emergency-visits ####
+
+"""
 print('emergency-visits')
 start_week_v=202001
 end_week_v=202105
-em_visit,cols_v=read_emergency(data_path,epiweek_date,state_index,start_week_v,end_week_v)
+em_visit,cols_v=read_emergency(data_path,epiweek_date,state_index,start_week_v,end_week_v)"""
+
 
 state_names=list(state_index.keys())
 state_fips=read_fips_code(state_names,data_path)
@@ -1593,13 +2327,19 @@ print('merging all state..')
 #Change outputdir and outfilename with the path and name of out file
 outputdir=data_path #"/Users/anikat/Downloads/covid-hospitalization-data/"
 outfile="covid-hospitalization-all-state-merged_vEW" + year_week_num+".csv"
-merge_data_state(mobility_state,apple_mobility,vacc,vacc_delphi,cdc_hosp,flu_hosp,dex,kinsa_state,data_covidnet,data_hosp,excess_death,
-                 jhu_death,survey,em_visit,jhu_cases,hosp_new_res,
-                 cols_m,cols_a,cols_vacc,cols_vacc_delphi,cols_cdc,cols_flu,cols_d,cols_k,cols_net,cols_hosp,cols_excess,
-                 cols_jhu,cols_survey,cols_v,cols_jhu_case,cols_hosp_new_res,
+#merge_data_state_test(mobility_state,cdc_hosp, flu_hosp, cols_m, cols_cdc, cols_flu,state_fips,epiweek,week_save,state_names,outputdir,outfile)
+
+merge_data_state(mobility_state,apple_mobility,vacc,vacc_delphi,cdc_hosp,flu_hosp,data_covidnet,excess_death,
+                 jhu_death,survey,jhu_cases,hosp_new_res,
+                 cols_m,cols_a,cols_vacc,cols_vacc_delphi,cols_cdc,cols_flu,cols_net,cols_excess,
+                 cols_jhu,cols_survey,cols_jhu_case,cols_hosp_new_res,
                  state_fips,epiweek,week_save,state_names,outputdir,outfile)
-
-
+"""
+#merge_data_state(mobility_state,apple_mobility,vacc,vacc_delphi,cdc_hosp,flu_hosp,dex,kinsa_state,data_covidnet,data_hosp,excess_death,
+                 jhu_death,survey,jhu_cases,hosp_new_res,
+                 cols_m,cols_a,cols_vacc,cols_vacc_delphi,cols_cdc,cols_flu,cols_d,cols_k,cols_net,cols_hosp,cols_excess,
+                 cols_jhu,cols_survey,cols_jhu_case,cols_hosp_new_res,
+                 state_fips,epiweek,week_save,state_names,outputdir,outfile)"""
 # #'''
 
 # kinsa_state,data_hosp, em_visit,cols_k, cols_hosp,cols_v,
@@ -1613,7 +2353,34 @@ merge_data_region(mobility_state,kinsa_path,iqvia_state,data_covidnet,data_hosp,
 '''
 
 
-# In[66]:
+# In[44]:
+
+
+cols_common=['epiweek','region']
+all_cols=cols_common+cols_flu
+final_data = pd.DataFrame(columns = all_cols)
+for reg in range(len(state_names)):
+    temp_data = pd.DataFrame(columns = all_cols)
+    temp_data['epiweek']=epiweek
+    temp_data['region']=[state_names[reg]]*len(epiweek_date)
+    for c in cols_flu:
+        if reg == 0: 
+            flu_hosp[c][reg][0:41] = np.nan
+            print(flu_hosp[c][reg][0:41])
+            temp_data[c]=flu_hosp[c][reg][:]
+    temp_data=temp_data[all_cols]
+    final_data=final_data.append(temp_data,ignore_index=True)
+print(len(final_data))
+final_data.head(50)
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
 
 
 #epiweek,epiweek_date=get_epiweek_list('202001','202053',2020)
@@ -1622,7 +2389,7 @@ print(epiweek_date)
 print(epiweek)
 
 
-# In[67]:
+# In[ ]:
 
 
 ##OPTIONAL: NO NEED TO RUN THIS FOR MERGING
@@ -1745,19 +2512,319 @@ vacc_delphi,cols_vacc_delphi=read_delphi_vaccine(state_index,epiweek_date,start_
 # In[ ]:
 
 
+def read_mobility_test(inputdir,epiweek_date,end_week,MISSING_TOKEN=0):
+    data=pd.read_csv(inputdir+"Global_Mobility_Report.csv",low_memory=False)
+    data=data[data['country_region_code']=='US']
+    data=data.drop(data[data['sub_region_1'] == 'Hawaii'].index)
+    data=data.drop(columns=['sub_region_2'])
+    display(data.head())
+    
+    state_names=data['sub_region_1'].drop_duplicates().values
+    state_names[0]='X' #changing nan to US national X
+    data['sub_region_1'] = data['sub_region_1'].fillna('X')
+    cols=data.columns
+    cols=list(cols[8:])
+    dic_names_to_abbv=read_fips_code(state_names,inputdir,abbv_to_code=False)
+    
+    state_index = {dic_names_to_abbv[state_names[i]]: i for i in range(len(state_names))} 
+    print(state_index)
+
+    #data[cols] = data[cols].fillna(MISSING_TOKEN)
+    """
+    num_states=len(state_names)
+    #print(cols)
+    week_cases={}
+    for c in cols:
+        week_cases[c]=np.empty((num_states,len(epiweek_date)))
+        week_cases[c][:][:]=np.nan
+        '''
+        week_cases[c]=np.zeros((num_states,len(epiweek_date)))
+        if (len(epiweek_date)-end_week)!=0:
+            week_cases[c][:][end_week]=np.nan
+        '''
+    print(cols)
+    #'''
+    for ix,row in data.iterrows():
+        if type(row['sub_region_1']) is float:
+            state_id=0
+        else:
+            state_id=state_index[dic_names_to_abbv[row['sub_region_1']]]
+        week_id=find_week_index(epiweek_date,str(row['date']),date_string=False)
+        if week_id!=-1:
+            for c in cols:
+                if pd.isnull(row[c])==False:
+                    if np.isnan(week_cases[c][state_id][week_id]):
+                            week_cases[c][state_id][week_id]=0
+                    week_cases[c][state_id][week_id]+=row[c]
+    
+    unit_test(week_cases,cols,epiweek_date,state_index,"unit_test/google-mobility.csv")
+    #'''
+    
+    return week_cases,cols,state_index,dic_names_to_abbv"""
+
+
+# In[15]:
+
+
+import copy
+from IPython.display import display 
+if date.today().weekday() != 6:
+    week_num = (date.today()-timedelta(2)).strftime("%U")
+    year_week_num = "2022"  + week_num
+    print(year_week_num)
+    week_end_date = (date.today() +timedelta((5-date.today().weekday()) % 7 )).strftime('%Y-%m-%d')
+    week_end_date = (date.today() - timedelta(2)).strftime('%Y-%m-%d')
+    week_end_string = (date.today() + timedelta((5-date.today().weekday()) % 7 )).strftime('%Y%m%d')
+    week_end_string = (date.today() - timedelta(2)).strftime('%Y%m%d')
+
+else:
+    week_num = (date.today()-timedelta(days=1)).strftime("%U")
+    year_week_num = "2022" + week_num
+    print(year_week_num)
+    week_end_date = (date.today() -timedelta((date.today().weekday()-5) % 7 )).strftime('%Y-%m-%d')
+    week_end_string = (date.today() - timedelta((date.today().weekday()-5) % 7 )).strftime('%Y%m%d')
+### INPUT FILE DIRECTORY #####
+# data_path="/Users/anikat/Downloads/covid-hospitalization-data/"
+data_path="./"
+# kinsa_path= "/Users/anikat/Downloads/kinsahealth/"
+kinsa_path = "./"
+### INPUT: EPIWEEK START, END WEEK ####
+#Both the method args will be same. This is to keep last date in the ouput file to same as epiweek
+epiweek1,epiweek_date1=get_epiweek_list('202001','202053',2020)
+epiweek2,epiweek_date2=get_epiweek_list('202101','202152',2021)
+epiweek3,epiweek_date3=get_epiweek_list('202201',year_week_num,2022)
 
 
 
-# In[ ]:
+
+epiweek=epiweek1+epiweek2+epiweek3
+epiweek_date=epiweek_date1+epiweek_date2+epiweek_date3
+week_save=copy.deepcopy(epiweek_date)
+### ****NOTE: for new year 2021 add another epiweek list and append with previous**** #######
+
+print(epiweek_date)
+print(epiweek)
+# PROCESSING MOBILITY ####
+# INPUT: END_WEEK: the last epiweek this csv file contains  ####
+print('google mobility')
+start_week_m=1
+end_week_m=int(week_num) #2021, m=epiweek since data generally have value -4 days lag for current week
+read_mobility_test(data_path,epiweek_date,end_week_m)
+#dic_names_to_abbv['United States']='X'
+#print(dic_names_to_abbv)
+#print(len(state_index.keys()))
+#print(state_index)
+
+
+# In[9]:
 
 
 
 
 
-# In[ ]:
+# In[54]:
+
+
+def get_epiweek_list_test(week_start,week_end,year):
+    def convert(x):
+        return Week.fromstring(str(x))
+    
+    wstart=convert(week_start)
+    wend=convert(week_end)
+    #print(wstart,wend)
+    week_edate_list=[]
+    week_list=[]
+    for week in Year(year).iterweeks():
+        date_time = week.enddate().strftime("%Y-%m-%d")
+        #print(week,date_time)
+        if week>=wstart and week<=wend:
+            week_edate_list.append(date_time)
+            week_list.append(str(week))
+     
+    return week_list,week_edate_list  
 
 
 
+def convert_to_epiweek(x):
+    return Week.fromdate(x)
+def read_mobility_test(inputdir,epiweek_date,end_week,MISSING_TOKEN=0):
+    data=pd.read_csv(inputdir+"Global_Mobility_Report.csv",low_memory=False)
+    data=data[data['country_region_code']=='US']
+    data=data.drop(data[data['sub_region_1'] == 'Hawaii'].index)
+    data= data[pd.isnull(data['sub_region_2'])]
+    data=data.drop(columns=['sub_region_2'])
+    
+    state_names=data['sub_region_1'].drop_duplicates().values
+    state_names[0]='X' #changing nan to US national X
+    cols=data.columns
+    print(cols)
+    cols=list(cols[8:])
+    print(cols)
+    
+    data['sub_region_1'] = data['sub_region_1'].fillna('X')
+    data['date'] = pd.to_datetime(data['date'])
+    data['epiweek'] = data['date'].dt.date.apply(convert_to_epiweek)
+    epiweek_data = data.groupby(['epiweek', 'sub_region_1'], as_index=False).mean()
+    dic_names_to_abbv=read_fips_code(state_names,inputdir,abbv_to_code=False)
+    print(dic_names_to_abbv)
+    
+    state_index = {dic_names_to_abbv[state_names[i]]: i for i in range(len(state_names))} 
+    print(state_index)
+    
+    #data[cols] = data[cols].fillna(MISSING_TOKEN)
+    num_states=len(state_names)
+    #print(cols)
+    week_cases={}
+    week_cases_check = {}
+    for c in cols:
+        week_cases[c]=np.empty((num_states,len(epiweek_date)))
+        week_cases[c][:][:]=np.nan
+        week_cases_check[c] = np.full((num_states,len(epiweek_date)), False)
+        '''
+        week_cases[c]=np.zeros((num_states,len(epiweek_date)))
+        if (len(epiweek_date)-end_week)!=0:
+            week_cases[c][:][end_week]=np.nan
+        '''
+    print(cols)
+    
+    #'''
+    for ix,row in data.iterrows():
+        state_id=state_index[dic_names_to_abbv[row['sub_region_1']]]
+        week_id=find_week_index(epiweek_date,str(row['date'].date()),date_string=False)
+        if week_id!=-1:
+            for c in cols:
+                if not pd.isnull(row[c]) and not week_cases_check[c][state_id][week_id]: 
+                    value = epiweek_data[epiweek_data['epiweek'] == convert_to_epiweek(row['date'])] 
+                    value = value[value['sub_region_1'] == row['sub_region_1']]
+                    
+                    for i in value[c]: 
+                        week_cases[c][state_id][week_id] = i
+                    week_cases_check[c][state_id][week_id] = True
+    unit_test(week_cases,cols,epiweek_date,state_index,"unit_test/google-mobility.csv")
+    #'''
+    
+    return week_cases,cols,state_index,dic_names_to_abbv
+     
+
+
+# In[55]:
+
+
+import copy
+if date.today().weekday() != 6:
+    week_num = (date.today()-timedelta(2)).strftime("%U")
+    year_week_num = "2022"  + week_num
+    print(year_week_num)
+    week_end_date = (date.today() +timedelta((5-date.today().weekday()) % 7 )).strftime('%Y-%m-%d')
+    week_end_date = (date.today() - timedelta(2)).strftime('%Y-%m-%d')
+    week_end_string = (date.today() + timedelta((5-date.today().weekday()) % 7 )).strftime('%Y%m%d')
+    week_end_string = (date.today() - timedelta(2)).strftime('%Y%m%d')
+
+else:
+    week_num = (date.today()-timedelta(days=1)).strftime("%U")
+    year_week_num = "2022" + week_num
+    print(year_week_num)
+    week_end_date = (date.today() -timedelta((date.today().weekday()-5) % 7 )).strftime('%Y-%m-%d')
+    week_end_string = (date.today() - timedelta((date.today().weekday()-5) % 7 )).strftime('%Y%m%d')
+data_path="./"
+# kinsa_path= "/Users/anikat/Downloads/kinsahealth/"
+kinsa_path = "./"
+### INPUT: EPIWEEK START, END WEEK ####
+#Both the method args will be same. This is to keep last date in the ouput file to same as epiweek
+epiweek1,epiweek_date1=get_epiweek_list('202001','202053',2020)
+epiweek2,epiweek_date2=get_epiweek_list('202101','202152',2021)
+epiweek3,epiweek_date3=get_epiweek_list('202201',year_week_num,2022)
+
+
+
+
+epiweek=epiweek1+epiweek2+epiweek3
+epiweek_date=epiweek_date1+epiweek_date2+epiweek_date3
+week_save=copy.deepcopy(epiweek_date)
+### ****NOTE: for new year 2021 add another epiweek list and append with previous**** #######
+
+print(epiweek_date)
+print(len(epiweek_date))
+print(epiweek)
+# PROCESSING MOBILITY ####
+# INPUT: END_WEEK: the last epiweek this csv file contains  ####
+print('google mobility')
+start_week_m=1
+end_week_m=int(week_num) #2021, m=epiweek since data generally have value -4 days lag for current week
+mobility_state,cols_m,state_index,dic_names_to_abbv=read_mobility_test(data_path,epiweek_date,end_week_m)
+dic_names_to_abbv['United States']='X'
+state_names=list(state_index.keys())
+state_fips=read_fips_code(state_names,data_path)
+
+outputdir=data_path #"/Users/anikat/Downloads/covid-hospitalization-data/"
+outfile="covid-hospitalization-all-state-merged_vEW" + year_week_num+".csv"
+merge_data_state_test(mobility_state, cols_m, state_fips,epiweek,week_save,state_names,outputdir,outfile)
+
+
+# In[30]:
+
+
+def merge_data_state_test(mobility,apple,vacc,vac_delphi,cdc_hosp,flu_hosp,dex,kinsa,covidnet,hosp,excess,jhu,survey,jhu_case,hosp_new_res,
+                     cols_m,cols_a,cols_vacc,cols_vac_delphi,cols_cdc,cols_flu,cols_d,cols_k,cols_net,
+                     cols_hosp,cols_excess,cols_jhu,cols_survey,cols_jhu_case,cols_hosp_new_res,
+                     state_fips,epiweek,epiweek_date,region_names,outputdir,outfilename):
+    
+    cols_common=['date','epiweek','region','fips']
+    #all_cols=cols_common+cols_m+cols_a+cols_d+cols_k+cols_net+cols_hosp+cols_excess+cols_jhu+cols_survey+cols_v
+    #all_cols=cols_common+cols_m+cols_a+cols_cdc+cols_d+cols_k+cols_q+cols_net+cols_hosp+cols_excess+cols_jhu+cols_survey+cols_v
+    all_cols=cols_common+cols_m+cols_a+cols_cdc+cols_flu+cols_d+cols_vacc+cols_vac_delphi+cols_k+cols_net+cols_hosp+cols_excess+cols_jhu+cols_survey+cols_jhu_case+cols_hosp_new_res
+    
+    print(all_cols)
+    final_data=pd.DataFrame(columns=all_cols)
+    for reg in range(len(region_names)):
+        temp_data=pd.DataFrame(columns=all_cols)
+        temp_data['date']=epiweek_date
+        temp_data['epiweek']=epiweek
+        temp_data['region']=[region_names[reg]]*len(epiweek_date)
+        temp_data['fips']=[state_fips[region_names[reg]]]*len(epiweek_date)
+        for c in cols_m:
+            temp_data[c]=mobility[c][reg][:]
+        for c in cols_a:
+            temp_data[c]=apple[c][reg][:]
+        for c in cols_cdc:
+            temp_data[c]=cdc_hosp[c][reg][:]
+        for c in cols_flu:
+            temp_data[c]=flu_hosp[c][reg][:]
+        for c in cols_d:
+            temp_data[c]=dex[c][reg][:]
+        for c in cols_vacc:
+            temp_data[c]=vacc[c][reg][:]
+        for c in cols_vacc_delphi:
+            temp_data[c]=vacc_delphi[c][reg][:]
+        for c in cols_k:
+            temp_data[c]=kinsa[c][reg][:]
+        #for c in cols_q:
+         #   temp_data[c]=iqvia[c][reg][:]
+        for c in cols_net:
+            temp_data[c]=covidnet[c][reg][:]
+        for c in cols_hosp:
+            temp_data[c]=hosp[c][reg][:]
+        for c in cols_excess:
+            temp_data[c]=excess[c][reg][:]
+        for c in cols_jhu:
+            temp_data[c]=jhu[c][reg][:]
+        for c in cols_survey:
+            temp_data[c]=survey[c][reg][:]
+        #for c in cols_v:
+        #    temp_data[c]=em_visit[c][reg][:]
+        for c in cols_jhu_case:
+            temp_data[c]=jhu_case[c][reg][:]
+        for c in cols_hosp_new_res:
+            temp_data[c]=hosp_new_res[c][reg][:]
+        
+        temp_data=temp_data[all_cols]
+        final_data=final_data.append(temp_data,ignore_index=True)
+    
+    final_data=final_data[all_cols]
+    print(final_data.shape)
+    final_data.to_csv(outputdir+outfilename,index=False)
+    
+    print('FINISHED....')
 
 
 # In[ ]:

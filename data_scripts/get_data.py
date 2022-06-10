@@ -1,3 +1,9 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[1]:
+
+
 import requests
 import pandas as pd
 import numpy as np
@@ -20,10 +26,10 @@ def get_datasets():
                 os.remove('applemobilitytrends.csv')
             os.rename(filename, 'applemobilitytrends.csv')
             print("Apple Mobility Data ... DONE")
-        elif filename.startswith("COVID-19_Reported_Patient_Impact_and_Hospital_Capacity_by_State_Timeseries"):
-            os.remove("COVID-19_Reported_Timeseries.csv")
+        """elif filename.startswith("COVID-19_Reported_Patient_Impact_and_Hospital_Capacity_by_State_Timeseries"):
+            #os.remove("COVID-19_Reported_Timeseries.csv")
             os.rename(filename, "COVID-19_Reported_Timeseries.csv")
-            print("CDC Hospitalization Data ... DONE")
+            print("CDC Hospitalization Data ... DONE")"""
 
     # get google global mobility
     url = "https://www.gstatic.com/covid19/mobility/Global_Mobility_Report.csv"
@@ -35,6 +41,15 @@ def get_datasets():
     print("Google Mobility Data ... DONE")
 
     # apple has to be manually retrieved since link changes daily
+
+    #get CDC hospitalization data
+    url = "https://healthdata.gov/api/views/g62h-syeh/rows.csv?accessType=DOWNLOAD"
+    response = requests.get(url).content
+    os.remove("COVID-19_Reported_Timeseries.csv")
+    hospital_csv = open("COVID-19_Reported_Timeseries.csv")
+    hospital_csv.write(response)
+    mobility_csv.close()
+    print("CDC Hospitalization Data ... DONE")
 
     # get jhu casecount data
     url = "https://github.com/CSSEGISandData/COVID-19/raw/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv"
@@ -83,3 +98,10 @@ def get_datasets():
 
 if __name__ == "__main__":
     get_datasets()
+
+
+# In[ ]:
+
+
+
+
