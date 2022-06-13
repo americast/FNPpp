@@ -2212,10 +2212,10 @@ def find_week_index(week,cur_date,date_string=True,strsplit='-'):
 
 
 # generate weekly from daily 
-daily_csv = pd.read_csv("covid-hospitalization-daily-all-state-merged_vEW202223.csv")
-mean_df = daily_csv.groupby(by=['epiweek','region'],as_index=False, sort=False).mean()
-sum_df = daily_csv.groupby(by=['epiweek','region'],as_index=False, sort=False).sum(min_count=1)
-last_df = daily_csv.groupby(by=['epiweek','region'],as_index=False, sort=False).last()
+daily_csv = pd.read_csv(outputdir+outfile)
+mean_df = daily_csv.groupby(by=['epiweek','region','fips'],as_index=False, sort=False).mean()
+sum_df = daily_csv.groupby(by=['epiweek','region','fips'],as_index=False, sort=False).sum(min_count=1)
+last_df = daily_csv.groupby(by=['epiweek','region','fips'],as_index=False, sort=False).last()
 
 weekly_df = pd.DataFrame()
 mean_key = ['retail_and_recreation_percent_change_from_baseline',
@@ -2236,6 +2236,7 @@ for ix, row in sum_df.iterrows():
     add_dict = {}
     add_dict['epiweek'] = sum_df['epiweek'][ix]
     add_dict['region'] = sum_df['region'][ix]
+    add_dict['fips'] = sum_df['fips'][ix]
     for i in mean_key: 
         add_dict[i] = mean_df[i][ix]
     for i in sum_key: 
@@ -2244,8 +2245,9 @@ for ix, row in sum_df.iterrows():
         add_dict[i] = last_df[i][ix]
     weekly_df = weekly_df.append(add_dict, ignore_index = True)
 
-    
-weekly_df = weekly_df.reindex(columns=['epiweek', 'region',
+# import pdb
+# pdb.set_trace()
+weekly_df = weekly_df.reindex(columns=['epiweek','region','fips',
        'retail_and_recreation_percent_change_from_baseline',
        'grocery_and_pharmacy_percent_change_from_baseline',
        'parks_percent_change_from_baseline',
@@ -2276,12 +2278,12 @@ week_save=copy.deepcopy(epiweek_date)
 end_week=int(week_num) #2021
 flu_hosp,cols_flu=read_cdc_hosp_weekly(data_path,epiweek_date,state_index,end_week)
 
-cols_common=['date','epiweek','region','fips']
+# cols_common=['date','epiweek','region','fips']
+cols_common=['epiweek','region','fips']
 all_cols = cols_common+cols_flu
 final_data=pd.DataFrame(columns=all_cols)
 for reg in range(len(state_names)):
     temp_data=pd.DataFrame(columns=all_cols)
-    temp_data['date']=week_save
     temp_data['epiweek']=epiweek
     temp_data['region']=[state_names[reg]]*len(epiweek_date)
     temp_data['fips']=[state_fips[state_names[reg]]]*len(epiweek_date)
@@ -2300,7 +2302,7 @@ final_data=final_data[all_cols]
 outputdir=data_path
 outfile="covid-hospitalization-all-state-merged_vEW"+ year_week_num+".csv"
 weekly_df = weekly_df.join(final_data['cdc_flu_hosp'])
-weekly_df = weekly_df.reindex(columns=['epiweek', 'region',
+weekly_df = weekly_df.reindex(columns=['epiweek','region','fips',
        'retail_and_recreation_percent_change_from_baseline',
        'grocery_and_pharmacy_percent_change_from_baseline',
        'parks_percent_change_from_baseline',
@@ -2318,6 +2320,7 @@ weekly_df = weekly_df.reindex(columns=['epiweek', 'region',
 weekly_df['epiweek'] = weekly_df['epiweek'].astype('int')
 weekly_df.to_csv(outputdir+outfile,index=False)
 
+quit()
 
 # In[ ]:
 
