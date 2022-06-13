@@ -29,7 +29,7 @@ https://www.cdc.gov/coronavirus/2019-ncov/covid-data/covidview/10092020/outpatie
 # In[112]:
 
 
-get_ipython().run_line_magic('matplotlib', 'inline')
+# get_ipython().run_line_magic('matplotlib', 'inline')
 import requests
 import pandas as pd
 import numpy as np
@@ -504,8 +504,9 @@ def read_delphi_vaccine_test(state_index,epiweek_date,start_week,end_week):
 
 
 def read_delphi(state_index, epiweek_date, start_week, end_week): 
-    def read_delphi_vaccine_test(state_index,epiweek_date,start_week,end_week):
     #'''
+    def read_delphi_vaccine_test(state_index,epiweek_date,start_week,end_week):
+        return 
     # The 
     vacc11=Epidata.covidcast('fb-survey','smoothed_wcovid_vaccinated','day','state',[start_week, Epidata.range(start_week, 20210301)],'*')
     vacc21=Epidata.covidcast('fb-survey','smoothed_wtested_positive_14d','day','state',[start_week, Epidata.range(start_week, 20210301)],'*')
