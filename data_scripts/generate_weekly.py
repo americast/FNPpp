@@ -37,13 +37,16 @@ else:
 print('merging all state..')
 #Change outputdir and outfilename with the path and name of out file
 outputdir=data_path #"/Users/anikat/Downloads/covid-hospitalization-data/"
+year_week_num = '202227' # for debuging
 outfile="covid-hospitalization-daily-all-state-merged_vEW"+ year_week_num+".csv"
 
-if not os.path.exist(outputdir+outfile):
+pdb.set_trace()
+if not os.path.exists(outputdir+outfile):
     raise Exception('daily file not found -- run daily script first')
 
 # generate weekly from daily 
 daily_csv = pd.read_csv(outputdir+outfile)
+pdb.set_trace()
 mean_df = daily_csv.groupby(by=['epiweek','region','fips'],as_index=False, sort=False).mean()
 sum_df = daily_csv.groupby(by=['epiweek','region','fips'],as_index=False, sort=False).sum(min_count=1)
 last_df = daily_csv.groupby(by=['epiweek','region','fips'],as_index=False, sort=False).last()
@@ -95,6 +98,8 @@ weekly_df = weekly_df.reindex(columns=['epiweek','region','fips',
        'cdc_total_resultsIncr'])
 weekly_df['epiweek'] = weekly_df['epiweek'].astype('int')
 
+# is the error here???
+# if so, why when converting to index it does not recognize it as duplicate?
 # print(weekly_df.shape)
 # weekly_df2 = weekly_df.copy()
 # weekly_df2 = weekly_df2.set_index(['epiweek','region','fips'])
@@ -104,6 +109,9 @@ weekly_df['epiweek'] = weekly_df['epiweek'].astype('int')
 
 # In[164]:
 
+"""
+    Add CDC flu hosp data
+"""
 state_index = get_state_index(data_path)
 state_names=list(state_index.keys())
 state_fips=read_fips_code(state_names,data_path)
