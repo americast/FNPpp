@@ -186,10 +186,14 @@ def read_fb(state_index,epiweek_date,start_week,end_week,start_week2):
     vacc_final.append(vacc[1][0]['epidata'])
     vacc_final.append(vacc[2][0]['epidata'])
     vacc_final.append(vacc[3][0]['epidata'])
-    
+
     for i in range(len(vacc_final)):
         for j in range(1, len(vacc[i])): 
-            vacc_final[i] += vacc[i][j]['epidata']
+            try:
+                vacc_final[i] += vacc[i][j]['epidata']
+            except KeyError:
+                print('key error epidata - vaccine')
+                pass
     
     fb_survey = []
     fb_survey.append([])
@@ -223,7 +227,11 @@ def read_fb(state_index,epiweek_date,start_week,end_week,start_week2):
     fb_survey_final.append(fb_survey[1][0]['epidata'])
     for i in range(len(fb_survey_final)):
         for j in range(1, len(fb_survey[i])): 
-            fb_survey_final[i] += fb_survey[i][j]['epidata']
+            try:
+                fb_survey_final[i] += fb_survey[i][j]['epidata']
+            except KeyError:
+                print('key error epidata - wcli and wili')
+                pass
     
     print(len(vacc[0]))
     print(len(vacc[1]))
@@ -1997,7 +2005,6 @@ start_week=20210101
 start_week2 = 20200307
 end_week=int(week_end_string) #yyyymmdd
 survey, cols_survey = read_fb(state_index,epiweek_date,start_week,end_week,start_week2) 
-
 #survey,cols_survey=read_delphi_fb_google_survey_test(state_index,epiweek_date,start_week,end_week)
 """
 print('delphi vaccine survey')
@@ -2319,64 +2326,3 @@ weekly_df = weekly_df.reindex(columns=['epiweek','region','fips',
        'cdc_total_resultsIncr'])
 weekly_df['epiweek'] = weekly_df['epiweek'].astype('int')
 weekly_df.to_csv(outputdir+outfile,index=False)
-
-quit()
-
-# In[ ]:
-
-
-import numpy as np
-a=np.array([1.0,2.0,3.0])
-b=np.zeros(4)
-b[0:2]=a[0]
-epi= [[element]*7 for element in a]
-#b=str(a)
-print(b)
-
-epiweek,epiweek_date=get_epiweek_list('202001','202023',2020)
-#print(epiweek_date)
-#print(epiweek)
-week_obj = datetime.strptime(epiweek_date[1], '%Y-%m-%d')
-
-dates=pd.date_range(start='2020-01-01', end='2020-06-13')
-str_dates=[date_obj.strftime('%Y-%m-%d') for date_obj in dates]
-print(str_dates)
-
-
-# In[ ]:
-
-
-#vaccination = Epidata.smoothed_covid_vaccinated('fb-survey', 'raw_cli', 'day', 'state', [start_week, Epidata.range(start_week, 20200601)], '*')
-start=20210101
-vacc1=Epidata.covidcast('fb-survey','smoothed_covid_vaccinated','day','state',[20200120, Epidata.range(20200120, 20210206)],'*')
-vacc2=Epidata.covidcast('fb-survey','smoothed_tested_positive_14d','day','state',[start, Epidata.range(start, 20210206)],'*')
-vacc3=Epidata.covidcast('fb-survey','smoothed_wearing_mask','day','state',[start, Epidata.range(start, 20210206)],'*')
-vacc4=Epidata.covidcast('fb-survey','smoothed_travel_outside_state_5d','day','state',[start, Epidata.range(start, 20210206)],'*')
-vacc5=Epidata.covidcast('fb-survey','smoothed_spent_time_1d','day','state',[start, Epidata.range(start, 20210206)],'*')
-print(vacc1.keys())
-print(vacc2.keys())
-print(vacc3.keys())
-print(vacc4.keys())
-print(vacc5.keys())
-print(len(vacc1['epidata']))
-'''
-print('smoothed_covid_vaccinated',vacc1['result'], vacc1['message'], len(vacc1['epidata']))
-print('smoothed_covid_vaccinated',vacc2['result'], vacc2['message'], len(vacc2['epidata']))
-print('smoothed_covid_vaccinated',vacc3['result'], vacc3['message'], len(vacc3['epidata']))
-print('smoothed_covid_vaccinated',vacc4['result'], vacc4['message'], len(vacc4['epidata']))
-print('smoothed_covid_vaccinated',vacc5['result'], vacc5['message'], len(vacc5['epidata']))
-
-print(vacc1['epidata'][0])
-print(vacc2['epidata'][0])
-print(vacc3['epidata'][0])
-print(vacc4['epidata'][0])
-print(vacc5['epidata'][0])
-#print(vacc5['epidata'][0]['sample_size'])
-'''
-
-
-# In[ ]:
-
-
-
-
