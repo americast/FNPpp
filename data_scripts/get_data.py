@@ -52,7 +52,6 @@ def get_datasets():
     hospital_csv.write(response)
     hospital_csv.close()
     print("CDC Hospitalization Data ... DONE")
-    quit()
 
     # get jhu casecount data
     url = "https://github.com/CSSEGISandData/COVID-19/raw/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv"

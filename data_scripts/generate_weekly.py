@@ -37,19 +37,25 @@ else:
 print('merging all state..')
 #Change outputdir and outfilename with the path and name of out file
 outputdir=data_path #"/Users/anikat/Downloads/covid-hospitalization-data/"
-year_week_num = '202227' # for debuging
+# year_week_num = '202227' # for debuging
 outfile="covid-hospitalization-daily-all-state-merged_vEW"+ year_week_num+".csv"
 
-pdb.set_trace()
+# pdb.set_trace()
 if not os.path.exists(outputdir+outfile):
     raise Exception('daily file not found -- run daily script first')
 
 # generate weekly from daily 
 daily_csv = pd.read_csv(outputdir+outfile)
-pdb.set_trace()
+# changes US to 0 so it is an int type and converts the whole column to the int type
+daily_csv['fips'] = daily_csv['fips'].replace('US', '0')
+daily_csv = daily_csv.astype({'fips': 'int'})
 mean_df = daily_csv.groupby(by=['epiweek','region','fips'],as_index=False, sort=False).mean()
 sum_df = daily_csv.groupby(by=['epiweek','region','fips'],as_index=False, sort=False).sum(min_count=1)
 last_df = daily_csv.groupby(by=['epiweek','region','fips'],as_index=False, sort=False).last()
+# convert the 0 back into “US”
+mean_df['fips'] = mean_df['fips'].replace(0, 'US')
+sum_df['fips'] = sum_df['fips'].replace(0, 'US')
+last_df['fips'] = last_df['fips'].replace(0, 'US')
 
 weekly_df = pd.DataFrame()
 mean_key = ['retail_and_recreation_percent_change_from_baseline',
@@ -63,7 +69,7 @@ mean_key = ['retail_and_recreation_percent_change_from_baseline',
 sum_key = ['cdc_hospitalized', 'death_jhu_incidence',
        'positiveIncr', 'cdc_negativeIncr', 'cdc_positiveIncr',
        'cdc_total_resultsIncr']
-
+       
 last_key = ['Stage_One_Doses', 'Stage_Two_Doses','covidnet', 'Observed Number','Excess Estimate',
             'death_jhu_cumulative','positiveIncr_cumulative']
 for ix, row in sum_df.iterrows(): 
@@ -79,8 +85,6 @@ for ix, row in sum_df.iterrows():
         add_dict[i] = last_df[i][ix]
     weekly_df = weekly_df.append(add_dict, ignore_index = True)
 
-
-# pdb.set_trace()
 weekly_df = weekly_df.reindex(columns=['epiweek','region','fips',
        'retail_and_recreation_percent_change_from_baseline',
        'grocery_and_pharmacy_percent_change_from_baseline',
@@ -97,14 +101,6 @@ weekly_df = weekly_df.reindex(columns=['epiweek','region','fips',
        'positiveIncr', 'cdc_negativeIncr', 'cdc_positiveIncr',
        'cdc_total_resultsIncr'])
 weekly_df['epiweek'] = weekly_df['epiweek'].astype('int')
-
-# is the error here???
-# if so, why when converting to index it does not recognize it as duplicate?
-# print(weekly_df.shape)
-# weekly_df2 = weekly_df.copy()
-# weekly_df2 = weekly_df2.set_index(['epiweek','region','fips'])
-# print(weekly_df2.index.duplicated(keep=False).sum())
-# pdb.set_trace()
 
 
 # In[164]:
@@ -165,14 +161,6 @@ weekly_df = weekly_df.reindex(columns=['epiweek','region','fips',
        'fb_survey_wcli', 'fb_survey_wili', 'positiveIncr_cumulative',
        'positiveIncr', 'cdc_negativeIncr', 'cdc_positiveIncr',
        'cdc_total_resultsIncr'])
-
-print(weekly_df.shape)
-# weekly_df.set_index(['epiweek','region','fips'])
-# print(weekly_df.index.duplicated(keep=False).sum())
-# weekly_df2 = weekly_df.copy()
-# weekly_df2 = weekly_df2.set_index(['epiweek','region','fips'])
-# print(weekly_df2.index.duplicated(keep=False).sum())
-# pdb.set_trace()
 
 weekly_df['epiweek'] = weekly_df['epiweek'].astype('int')
 weekly_df.to_csv(outputdir+outfile,index=False)
