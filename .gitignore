@@ -10,6 +10,11 @@ __pycache__/
 figures/
 *.pkl
 *.png
+*.csv
+figures/
+figures-flu/
+results/
+results-flu/
 
 # Distribution / packaging
 .Python
