@@ -4,6 +4,8 @@
 
 from data_generation import *
 
+''' TODO: check all files are in place, e.g. COVIDNet'''
+
 data_path="./"
 kinsa_path= "./"
 
