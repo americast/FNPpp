@@ -1,4 +1,4 @@
-from utils.utils import check_region_data, std_interval_correction, get_std_from_data, get_last_data_points, get_max_value
+from utils.utils import check_region_data, std_interval_correction, get_std_from_data, get_last_data_points, get_max_value, collect_and_correct
 import numpy as np
 import pandas as pd
 from datetime import date, timedelta
@@ -9,13 +9,7 @@ from itertools import compress
 import pdb
 import pickle
 import os
-
-# ew202201 remove
-death_remove = []
-hosp_remove = [] 
-death_replace_4th_with_3th = []
-increase_death_interval_high = []
-increase_death_interval_low = []
+from utils.flu_prediction_list import *
 
 regions_list = ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC',
             'FL', 'GA', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA',
@@ -24,27 +18,6 @@ regions_list = ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC',
             'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT',
             'VA', 'WA', 'WV', 'WI', 'WY', 'X']
 
-
-def get_predictions_from_pkl(nextk,res_path,region):
-    """ reads from pkl, returns predictions for a region as a list"""
-    week_current = int(str(Week.thisweek(system="CDC") - 1)[-2:])
-    week_current = str(week_current)
-    if len(week_current)==1:
-        week_current = '0'+week_current
-    path=res_path+'flu_deploy_week_' + week_current +'_feats_' + str(nextk) + '_predictions.pkl'# b2f
-    # path=res_path+'flu_deploy_week_' + week_current +'_feats_' + str(nextk) + '_predictions_refined.pkl'# b2f
-
-    if not os.path.exists(path):
-        print('not found:',path)
-        return None
-    predictions = []
-    
-    with open(path, 'rb') as f:
-        data_pickle = pickle.load(f)
-
-    idx = regions_list.index(region)
-    predictions = data_pickle[:,idx]
-    return predictions
 
 def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=None,res_path='./results-flu/',sub_path='./submissions-flu/'):
     """
@@ -69,14 +42,12 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
     upper_bounds_preds = []
 
     """ collect predictions """
+    # get last values
     medians = last_data_vals.ravel().tolist()
+    # extend list with collected predictions
+    medians.extend(collect_and_correct(k_ahead,res_path,'flu',region,death_replace_last3,death_replace_last2,death_replace_4th_with_3th,mode='downwards'))
+    # medians.extend(collect_and_correct(k_ahead,res_path,'flu',region,death_replace_last3,death_replace_last2,death_replace_4th_with_3th,mode='upwards'))
 
-    for nextk in range(1,k_ahead+1):
-        predictions = get_predictions_from_pkl(nextk,res_path,region)
-        if predictions is None:
-            continue
-        pred_median = np.median(predictions)
-        medians.append(pred_median)
 
     """ smooth predictions using last observations in time series """
     window_width = 3
@@ -89,7 +60,7 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
 
     for nextk in range(1,k_ahead+1):
         quantile_cuts = [0.01, 0.025] + list(np.arange(0.05, 0.95+0.05, 0.05,dtype=float)) + [0.975, 0.99]
-        predictions = std_interval_correction(medians[nextk-1],scale_data)
+        predictions = std_interval_correction(medians[nextk-1],scale_data,nextk)
         quantiles = np.quantile(predictions, quantile_cuts)
         df = pd.read_csv(datafile, header=0)
         df = df[(df['region']==region)]
@@ -102,7 +73,7 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
         if write_submission:
             # >>>>>> 
             team='GT'
-            model='DeepCOVID'
+            model='FluFNP'
             # date=Week.fromstring('2020'+str(ew)).enddate() + timedelta(days=2)
             date=ew.enddate() + timedelta(days=2)
             datex=date
@@ -122,7 +93,7 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
             if len(location_fips)==1:
                 location_fips = '0'+location_fips 
 
-            if region in death_remove:
+            if region in hosp_remove:
                 suffix_=suffix+'_rm'
                 continue
             f.write(str(datex)+','+str(nextk)+' wk ahead inc '+target_name+','+str(target_end_date)+','+location_fips+','+'point'+','+'NA'+','+"{:.2f}".format(np.mean(predictions))+'\n')

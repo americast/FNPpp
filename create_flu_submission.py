@@ -1,4 +1,5 @@
-from utils.utils import check_region_data, std_interval_correction, multiplier_interval_correction
+
+from utils.utils import check_region_data
 import numpy as np
 import pandas as pd
 from datetime import date, timedelta
@@ -25,37 +26,34 @@ regions_list = ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC',
             'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT',
             'VA', 'WA', 'WV', 'WI', 'WY', 'X']
 
-def get_max_value(datafile,region,target_name,ew):
+
+
+# get cumulative
+def get_cumsum_region(datafile,region,target_name,ew):
     df = pd.read_csv(datafile, header=0)
     df = df[(df['region']==region)]
-    if target_name=='flu hosp':
-        val = df.loc[:,'cdc_flu_hosp'].max()
+    if target_name=='death':
+        cum = df.loc[:,'cdc_flu_hosp'].sum()
+    elif target_name=='hosp':
+        cum = None
+        # raise Exception('not implemented')
+        # cum = df.loc[:,'hospitalizedIncrease'].sum()
     else:
         print('error', region,target_name)
         time.sleep(2)
-    return val
+    return cum
 
-def get_std_from_data(datafile,region,target_name,ew):
-    df = pd.read_csv(datafile, header=0)
-    df = df[(df['region']==region)]
-    if target_name=='flu hosp':
-        val = df.loc[:,'cdc_flu_hosp'].std()
-    else:
-        print('error', region,target_name)
-        time.sleep(2)
-    return val
-
-def get_predictions_from_pkl(nextk,res_path,region):
+def get_predictions_from_pkl(next,res_path,region,week_current=None):
     """ reads from pkl, returns predictions for a region as a list"""
-    week_current = int(str(Week.thisweek(system="CDC") - 1)[-2:])
-    week_current = str(week_current)
+    if week_current is None:
+        week_current = int(str(Week.thisweek(system="CDC") - 1)[-2:])
+        week_current = str(week_current)
     if len(week_current)==1:
         week_current = '0'+week_current
-    path=res_path+'flu_deploy_week_' + week_current +'_feats_' + str(nextk) + '_predictions.pkl'# b2f
-    # path=res_path+'flu_deploy_week_' + week_current +'_feats_' + str(nextk) + '_predictions_refined.pkl'# b2f
+    path=res_path+'flu_deploy_week_' + week_current +'_feats_' + str(next) + '_predictions.pkl' # normal
 
     if not os.path.exists(path):
-        print('not found:',path)
+        print(path)
         return None
     predictions = []
     
@@ -75,37 +73,34 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
     """
     if data_ew is None:
         data_ew=ew  
-    k_ahead=4
-    datafile='./data/covid-hospitalization-all-state-merged_vEW'+str(data_ew)+'.csv'
+    if daily:
+        k_ahead=30 # changed from 28 to 30 on nov14 as requested by CDC (only needed for training)
+        datafile='./data/covid-hospitalization-daily-all-state-merged_vEW'+str(data_ew)+'.csv'
+    else:
+        k_ahead=4
+        datafile='./data/covid-hospitalization-all-state-merged_vEW'+str(data_ew)+'.csv'
+    # pdb.set_trace()
     if not check_region_data(datafile,region,target_name,ew): # checks if region is there in our dataset
         return 0    
 
-    max_val = get_max_value(datafile,region,target_name,ew)
-    scale_data = get_std_from_data(datafile,region,target_name,ew)
+    # prev_cum = get_cumsum_region(datafile,region,target_name,ew)
     print(region)
     point_preds = []
     lower_bounds_preds = []
     upper_bounds_preds = []
-
     for nextk in range(1,k_ahead+1):
-
-        predictions = get_predictions_from_pkl(nextk,res_path,region)
+        predictions = get_predictions_from_pkl(nextk,res_path,region,str(ew.week))
         
         if predictions is None:
             continue
-
-        pred_median = np.median(predictions)
         quantile_cuts = [0.01, 0.025] + list(np.arange(0.05, 0.95+0.05, 0.05,dtype=float)) + [0.975, 0.99]
-        predictions = std_interval_correction(pred_median,scale_data)
-        # MULT = 5
-        # predictions = multiplier_interval_correction(predictions,MULT)
+        new_predictions = []
+        for pred in predictions:
+            if pred < 0:
+                pred = 0
+            new_predictions.append(pred)
+        predictions = new_predictions
 
-        # filter outliers
-        # z_scores = stats.zscore(predictions)
-        # abs_z_scores = np.abs(z_scores)
-        # fil = (abs_z_scores < LIMIT) & (predictions < max_val) # filter too big, TODO: too small & (predictions > min_val)
-        # fil = (abs_z_scores < LIMIT)
-        # predictions=list(compress(predictions, fil))
         quantiles = np.quantile(predictions, quantile_cuts)
         df = pd.read_csv(datafile, header=0)
         df = df[(df['region']==region)]
@@ -114,13 +109,11 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
         upper_bounds_preds.append(quantiles[-2])
         point_preds.append(np.mean(predictions))
 
-        
         suffix_=suffix
         if write_submission:
             # >>>>>> 
             team='GT'
-            model='DeepCOVID'
-            # date=Week.fromstring('2020'+str(ew)).enddate() + timedelta(days=2)
+            model='FluFNP-raw'
             date=ew.enddate() + timedelta(days=2)
             datex=date
             date=date.strftime("%Y-%m-%d") 
@@ -139,16 +132,22 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
             if len(location_fips)==1:
                 location_fips = '0'+location_fips 
 
-            if region in death_remove:
+            if region in hosp_remove:
                 suffix_=suffix+'_rm'
                 continue
             f.write(str(datex)+','+str(nextk)+' wk ahead inc '+target_name+','+str(target_end_date)+','+location_fips+','+'point'+','+'NA'+','+"{:.2f}".format(np.mean(predictions))+'\n')
             for q_c, q_v in zip(quantile_cuts, quantiles):
                 f.write(str(datex)+','+str(nextk)+' wk ahead inc '+target_name+','+str(target_end_date)+','+location_fips+','+'quantile'+','+"{:.4f}".format(q_c)+','+"{:.4f}".format(q_v)+'\n')
 
+        
+    suffix_=suffix
     if visualize:
+        figpath=f'./figures-flu/ew{ew}/raw/'
+        if not os.path.exists(figpath):
+            os.makedirs(figpath)
         print('==='+target_name+' '+region+'===')
-        visualize_region(target_name,region,point_preds,datafile,'inc',lower_bounds_preds.copy(),upper_bounds_preds.copy(),ew,suffix_,daily,'./figures-flu/')
+        # pdb.set_trace()
+        visualize_region(target_name,region,point_preds,datafile,'inc',lower_bounds_preds.copy(),upper_bounds_preds.copy(),ew,suffix_,daily,figpath)
 
     
 if __name__ == "__main__":
@@ -171,7 +170,15 @@ if __name__ == "__main__":
     suffix='M1_10_vEW'+str(ew)
     print(suffix)
 
-    for region in temp_regions:
-        parse(region,ew,target_name,suffix,daily,WRITE_SUBMISSION_FILE,PLOT)
+    # for region in temp_regions:
+    #     parse(region,ew,target_name,suffix,daily,WRITE_SUBMISSION_FILE,PLOT)
+
+    """ to generate past ones """
+
+    # for ew in ['01','02','03','04','05','06','07','08','09']:
+    for ew in ['10','11','12']:
+        ew=Week.fromstring('2022'+str(ew))
+        for region in temp_regions:
+            parse(region,ew,target_name,suffix,daily,WRITE_SUBMISSION_FILE,PLOT)
 
     quit()

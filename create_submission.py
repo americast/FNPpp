@@ -317,6 +317,4 @@ if __name__ == "__main__":
     suffix='M1_daily_5_vEW'+str(ew)
     temp_regions = regions
     daily=True
-    # for region in temp_regions:
-    #     parse(region,ew,target_name,suffix,daily,True,PLOT)
     quit()

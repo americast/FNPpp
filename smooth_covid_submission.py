@@ -1,4 +1,5 @@
-from utils.utils import check_region_data, std_interval_correction, get_std_from_data, get_last_data_points, get_max_value, get_cumsum_region
+from torch import exp
+from utils.utils import check_region_data, std_interval_correction, get_std_from_data, get_last_data_points, get_max_value, get_cumsum_region, collect_and_correct
 import numpy as np
 import pandas as pd
 from datetime import date, timedelta
@@ -10,12 +11,7 @@ import pdb
 import pickle
 import os
 import time
-# ew202201 remove
-death_remove = []
-hosp_remove = [] 
-death_replace_4th_with_3th = []
-increase_death_interval_high = []
-increase_death_interval_low = []
+from utils.covid_prediction_list import *
 
 regions_list = ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC',
             'FL', 'GA', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA',
@@ -23,30 +19,6 @@ regions_list = ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC',
             'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK',
             'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT',
             'VA', 'WA', 'WV', 'WI', 'WY', 'X']
-
-def get_predictions_from_pkl(next,res_path,region):
-    """ reads from pkl, returns predictions for a region as a list"""
-    week_current = int(str(Week.thisweek(system="CDC") - 1)[-2:])
-    week_current = str(week_current)
-    if len(week_current)==1:
-        week_current = '0'+week_current
-    if(daily):
-        path=res_path+ 'deploy_week_' + week_current +'_' + str(next) + '_predictions.pkl'
-    else:
-        path=res_path+'mort_deploy_week_' + week_current +'_' + str(next) + '_predictions.pkl' # normal
-        # path=res_path+'mort_deploy_week_' + str(week_current) +'_' + str(next) + '_predictions_refined.pkl'# b2f
-
-    if not os.path.exists(path):
-        print(path)
-        return None
-    predictions = []
-    
-    with open(path, 'rb') as f:
-        data_pickle = pickle.load(f)
-
-    idx = regions_list.index(region)
-    predictions = data_pickle[:,idx]
-    return predictions
 
 def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=None,res_path='./results/',sub_path='./submissions-covid/'):
     """
@@ -77,14 +49,11 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
     upper_bounds_preds = []
 
     """ collect predictions """
+    # get last values
     medians = last_data_vals.ravel().tolist()
-
-    for nextk in range(1,k_ahead+1):
-        predictions = get_predictions_from_pkl(nextk,res_path,region)
-        if predictions is None:
-            continue
-        pred_median = np.median(predictions)
-        medians.append(pred_median)
+    # extend list with collected predictions
+    # medians.extend(collect_and_correct(k_ahead,res_path,'covid',region,death_replace_last3,death_replace_last2,death_replace_last1,mode='downwards'))
+    medians.extend(collect_and_correct(k_ahead,res_path,'covid',region,death_replace_last3,death_replace_last2,death_replace_last1,mode='upwards'))
 
     """ smooth predictions using last observations in time series """
     window_width = 3
@@ -93,11 +62,11 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
     medians = ma_vec[-4:]
 
     """ scale data is tunable """
-    scale_data = scale_data/2
+    scale_data = scale_data/9
 
     for next in range(1,k_ahead+1):
         quantile_cuts = [0.01, 0.025] + list(np.arange(0.05, 0.95+0.05, 0.05,dtype=float)) + [0.975, 0.99]
-        predictions = std_interval_correction(medians[next-1],scale_data)
+        predictions = std_interval_correction(medians[next-1],scale_data,next)
         quantiles = np.quantile(predictions, quantile_cuts)
         df = pd.read_csv(datafile, header=0)
         df = df[(df['region']==region)]
