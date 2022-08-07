@@ -1833,14 +1833,14 @@ def read_emergency(inputdir,epiweek_date,state_index,start_week,end_week):
 # In[70]:
 
 
-def merge_data_state(mobility,apple,cdc_hosp,vacc,covidnet,excess,jhu,survey,jhu_case,hosp_new_res,
-                     cols_m,cols_a,cols_cdc,cols_vacc,cols_net,cols_excess,
-                     cols_jhu,cols_survey,cols_jhu_case,cols_hosp_new_res,
+def merge_data_state(mobility,cdc_hosp,vacc,covidnet,excess,jhu,jhu_case,hosp_new_res,
+                     cols_m,cols_cdc,cols_vacc,cols_net,cols_excess,
+                     cols_jhu,cols_jhu_case,cols_hosp_new_res,
                      state_fips,epiweek,epiweek_date,region_names,outputdir,outfilename):
     
     cols_common=['date','epiweek','region','fips']
     #all_cols=cols_common+cols_m+cols_a+cols_cdc+cols_d+cols_k+cols_q+cols_net+cols_hosp+cols_excess+cols_jhu+cols_survey+cols_v
-    all_cols=cols_common+cols_m+cols_a+cols_cdc+cols_vacc+cols_net+cols_excess+cols_jhu+cols_survey+cols_jhu_case+cols_hosp_new_res
+    all_cols=cols_common+cols_m+cols_cdc+cols_vacc+cols_net+cols_excess+cols_jhu+cols_jhu_case+cols_hosp_new_res
     #all_cols=cols_common+cols_m+cols_a+cols_d+cols_k+cols_net+cols_hosp+cols_excess+cols_jhu+cols_survey+cols_v
     print(all_cols)
     final_data=pd.DataFrame(columns=all_cols)
@@ -1852,8 +1852,6 @@ def merge_data_state(mobility,apple,cdc_hosp,vacc,covidnet,excess,jhu,survey,jhu
         temp_data['fips']=[state_fips[region_names[reg]]]*len(epiweek_date)
         for c in cols_m:
             temp_data[c]=mobility[c][reg][:]
-        for c in cols_a:
-            temp_data[c]=apple[c][reg][:]
         for c in cols_cdc:
             if reg == 0: 
                 cdc_hosp[c][reg][0:96] = np.nan
@@ -1877,8 +1875,6 @@ def merge_data_state(mobility,apple,cdc_hosp,vacc,covidnet,excess,jhu,survey,jhu
             temp_data[c]=excess[c][reg][:]
         for c in cols_jhu:
             temp_data[c]=jhu[c][reg][:]
-        for c in cols_survey:
-            temp_data[c]=survey[c][reg][:]
         #for c in cols_v:
             #temp_data[c]=em_visit[c][reg][:]
         for c in cols_jhu_case:

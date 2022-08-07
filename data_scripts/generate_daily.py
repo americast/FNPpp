@@ -69,7 +69,7 @@ start_week=20210101
 start_week2 = 20200307
 end_week=int(week_end_string) #yyyymmdd
 # print('--skip FB')
-survey, cols_survey = read_fb(state_index,epiweek_date,start_week,end_week,start_week2) 
+# survey, cols_survey = read_fb(state_index,epiweek_date,start_week,end_week,start_week2) 
 
 #survey,cols_survey=read_delphi_fb_google_survey_test(state_index,epiweek_date,start_week,end_week)
 """
@@ -89,8 +89,8 @@ end_day=len(epiweek_date)-2 #change the value 14 if its is more/less
 #print(epiweek_date[start_day],epiweek_date[end_day])
 cdc_hosp,cols_cdc=read_cdc_hosp(data_path,epiweek_date,state_index,start_day,end_day)
 
-print('apple mobility')
-apple_mobility,cols_a=read_apple_mobility(data_path,epiweek_date,state_index,dic_names_to_abbv)
+# print('apple mobility')
+# apple_mobility,cols_a=read_apple_mobility(data_path,epiweek_date,state_index,dic_names_to_abbv)
 
 print('JHU death')
 jhu_death,cols_jhu=read_jhu_death(data_path,epiweek_date,state_index,dic_names_to_abbv)
@@ -156,9 +156,9 @@ print('merging all state..')
 outputdir=data_path #"/Users/anikat/Downloads/covid-hospitalization-data/"
 outfile="covid-hospitalization-daily-all-state-merged_vEW"+ year_week_num+".csv"
 # merge and save
-merge_data_state(mobility_state,apple_mobility,cdc_hosp,vacc,data_covidnet,excess_death,
-                 jhu_death,survey,jhu_cases,hosp_new_res,
-                 cols_m,cols_a,cols_cdc,cols_vacc,cols_net,
-                 cols_excess,cols_jhu,cols_survey,cols_jhu_case,cols_hosp_new_res,
+merge_data_state(mobility_state,cdc_hosp,vacc,data_covidnet,excess_death,
+                 jhu_death,jhu_cases,hosp_new_res,
+                 cols_m,cols_cdc,cols_vacc,cols_net,
+                 cols_excess,cols_jhu,cols_jhu_case,cols_hosp_new_res,
                  state_fips,epiweek,week_save,state_names,outputdir,outfile)
 
