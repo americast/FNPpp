@@ -94,7 +94,9 @@ def get_datasets():
     print("Excess Death data ... DONE")
 
     # get vaccine data
-    url = "https://github.com/govex/COVID-19/raw/master/data_tables/vaccine_data/us_data/time_series/vaccine_data_us_timeline.csv"
+    # url = "https://github.com/govex/COVID-19/raw/master/data_tables/vaccine_data/us_data/time_series/vaccine_data_us_timeline.csv"
+    # new link for vaccine data, by Leo 
+    url = "https://raw.githubusercontent.com/govex/COVID-19/master/data_tables/vaccine_data/us_data/time_series/time_series_covid19_vaccine_us.csv"
     response = requests.get(url).content
     if os.path.exists("vaccine_data_us_state_timeline.csv"):
         os.remove("vaccine_data_us_state_timeline.csv")

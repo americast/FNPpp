@@ -1061,6 +1061,8 @@ def read_mobility(inputdir,epiweek_date,end_day,MISSING_TOKEN=0):
 
 def read_vaccine_doses(inputdir,epiweek_date,state_index,dic_names_to_abbv):
     data=pd.read_csv(inputdir+"vaccine_data_us_state_timeline.csv")
+    # new file header, modify back to old, by Leo
+    data=data.rename(columns={"People_at_least_one_dose":"Stage_One_Doses", "People_fully_vaccinated":"Stage_Two_Doses"})
     #data=data.fillna(0)
     #state_names=list(state_index.keys())
     state_names=list(dic_names_to_abbv.keys())
