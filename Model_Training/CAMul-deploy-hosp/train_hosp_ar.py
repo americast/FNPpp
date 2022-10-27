@@ -153,7 +153,7 @@ class ScalerFeat:
         return (data - self.means[:, idx]) / self.vars[:, idx]
 
     def inverse_transform_idx(self, data, idx=label_idx):
-        return data * self.vars[:, idx] + self.means[:, idx]
+        return data * self.vars[:, idx, None] + self.means[:, idx, None]
 
 
 scaler = ScalerFeat(raw_data)
