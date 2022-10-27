@@ -21,9 +21,9 @@ from models.seqfnpmodels import RegressionSeqFNP
 
 parser = OptionParser()
 parser.add_option("-e", "--epiweek", dest="epiweek", default="202140", type="string")
-parser.add_option("--epochs", dest="epochs", default=1500, type="int")
+parser.add_option("--epochs", dest="epochs", default=3500, type="int")
 parser.add_option("--lr", dest="lr", default=1e-3, type="float")
-parser.add_option("--patience", dest="patience", default=100, type="int")
+parser.add_option("--patience", dest="patience", default=1000, type="int")
 parser.add_option("-d", "--day", dest="day_ahead", default=4, type="int")
 parser.add_option("-s", "--seed", dest="seed", default=0, type="int")
 parser.add_option("-b", "--batch", dest="batch_size", default=128, type="int")
@@ -125,7 +125,7 @@ states = [
 
 raw_data = []
 for st in states:
-    with open(f"./data/hosp_data/saves/hosp_{st}_{epiweek}.pkl", "rb") as fl:
+    with open(f"./data/hosp_data/hosp_data/saves/hosp_{st}_{epiweek}.pkl", "rb") as fl:
         raw_data.append(pickle.load(fl))
 
 raw_data = np.array(raw_data)[:, start_day:, :]  # states x days x features
