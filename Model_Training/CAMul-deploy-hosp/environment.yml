@@ -19,6 +19,7 @@ dependencies:
   - tqdm
   - pip:
     - epiweeks
+    - properscoring
 # For development
   - ipykernel
   - jupyter

@@ -5,8 +5,18 @@ import pickle, os
 from .hosp_consts import *
 
 parser = OptionParser()
-parser.add_option("-r", "--region", dest="region", default="X",)
-parser.add_option("-e", "--epiweek", dest="epiweek", default="202140",)
+parser.add_option(
+    "-r",
+    "--region",
+    dest="region",
+    default="X",
+)
+parser.add_option(
+    "-e",
+    "--epiweek",
+    dest="epiweek",
+    default="202140",
+)
 parser.add_option("-s", "--smooth", dest="smooth", default=1, type="int")
 (options, args) = parser.parse_args()
 
@@ -16,8 +26,10 @@ smooth = options.smooth
 
 # TODO: Check which subset is the best for hospitalization data
 
-
-filepath = f"./data/hosp_data/covid-hospitalization-daily-all-state-merged_vEW{epiweek}.csv"
+filepath = os.path.join(
+    os.getcwd(),
+    f"data/covid_data/covid-hospitalization-all-state-merged_vEW{epiweek}.csv",
+)
 df = pd.read_csv(filepath)
 df = df[df["region"] == region]
 
@@ -34,6 +46,8 @@ if smooth == 1:
 
 # Convert to numpy array
 df = df.to_numpy()
+print(f"Shape of data: {df.shape}")
+
 
 # Normalize
 
@@ -42,4 +56,3 @@ df = df.to_numpy()
 os.makedirs("./data/hosp_data/saves", exist_ok=True)
 with open(f"./data/hosp_data/saves/hosp_{region}_{epiweek}.pkl", "wb") as f:
     pickle.dump(df, f)
-

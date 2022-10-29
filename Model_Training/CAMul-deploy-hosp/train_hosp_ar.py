@@ -125,7 +125,7 @@ states = [
 
 raw_data = []
 for st in states:
-    with open(f"./data/hosp_data/hosp_data/saves/hosp_{st}_{epiweek}.pkl", "rb") as fl:
+    with open(f"./data/hosp_data/saves/hosp_{st}_{epiweek}.pkl", "rb") as fl:
         raw_data.append(pickle.load(fl))
 
 raw_data = np.array(raw_data)[:, start_day:, :]  # states x days x features
@@ -382,6 +382,6 @@ Y_test = test_step(X_test, X_ref, samples=2000).squeeze()
 Y_test_unnorm = scaler.inverse_transform_idx(Y_test, label_idx)
 
 # Save predictions
-os.makedirs(f"./hosp_predictions", exist_ok=True)
+os.makedirs("./hosp_predictions", exist_ok=True)
 with open(f"./hosp_predictions/{save_model_name}_predictions.pkl", "wb") as f:
     pickle.dump(Y_test_unnorm, f)
