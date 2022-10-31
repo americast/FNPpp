@@ -1,11 +1,8 @@
-from os import stat
 import pickle
 from optparse import OptionParser
 import networkx as nx
 
-import matplotlib.pyplot as plt
 import numpy as np
-from numpy.core.numeric import full
 import torch
 import torch.optim as optim
 import torch.nn as nn
@@ -96,11 +93,18 @@ state_idx = {s: i for i, s in enumerate(states)}
 start_week = 0
 train_weeks = np.arange(start_week, pred_week - week_ahead + 1)
 
+
 def get_week(week, region):
     file = f"./data/tweet_dataset/week{week}_{region}.npy"
     return np.load(file)
- 
-full_sequences = np.array([np.array([get_week(w, r) for w in np.arange(start_week, pred_week + 1)]) for r in states])
+
+
+full_sequences = np.array(
+    [
+        np.array([get_week(w, r) for w in np.arange(start_week, pred_week + 1)])
+        for r in states
+    ]
+)
 
 with open("./data/demographics/saves/adj_list.pkl", "rb") as f:
     adj_list = pickle.load(f)
@@ -117,14 +121,12 @@ with open("./data/demographics/saves/static_demo.pkl", "rb") as f:
 
 static_demo = np.array([static_demo[s] for s in states])
 
+
 def week_to_month(week: int):
     return (week) // 4 + 1
 
 
-
-
-
-def seq_to_dataset(seq,  state, week_ahead=week_ahead):
+def seq_to_dataset(seq, state, week_ahead=week_ahead):
     X, Y, wk, reg, static = [], [], [], [], []
     start_idx = max(week_ahead, seq.shape[0] - 32 + week_ahead)
     for i in range(start_idx, seq.shape[0]):
@@ -135,9 +137,10 @@ def seq_to_dataset(seq,  state, week_ahead=week_ahead):
         static.append(static_demo[state])
     return X, Y, wk, reg, static
 
+
 X, X_symp, Y, mt, reg, static = [], [], [], [], [], []
 for i, s in enumerate(states):
-    ans = seq_to_dataset(full_sequences[i, :train_weeks[-1]], state_idx[s])
+    ans = seq_to_dataset(full_sequences[i, : train_weeks[-1]], state_idx[s])
     X.extend([x[:, topic] for x in ans[0]])
     X_symp.extend([x for x in ans[0]])
     Y.extend([x[topic] for x in ans[1]])
@@ -148,8 +151,8 @@ for i, s in enumerate(states):
 X_test, X_symp_test, Y_test, mt_test, reg_test, static_test = [], [], [], [], [], []
 for i, s in enumerate(states):
     ans = seq_to_dataset(full_sequences[i], state_idx[s], pred_week)
-    X_test.append(full_sequences[i, :train_weeks[-1], topic])
-    X_symp_test.append(full_sequences[i, :train_weeks[-1]])
+    X_test.append(full_sequences[i, : train_weeks[-1], topic])
+    X_symp_test.append(full_sequences[i, : train_weeks[-1]])
     Y_test.append(full_sequences[i, -1, topic])
     mt_test.append(week_to_month(pred_week))
     reg_test.append(i)
@@ -157,13 +160,11 @@ for i, s in enumerate(states):
 
 
 # Reference points
-seq_references = full_sequences[:,:,topic]
+seq_references = full_sequences[:, :, topic]
 symp_references = full_sequences
 month_references = np.arange(12)
 reg_references = np.arange(len(states))
 static_reference = static_demo
-
-
 
 
 def preprocess_seq_batch(seq_list: list):
@@ -199,9 +200,7 @@ test_y = np.array(Y_test)
 month_enc = EmbedEncoder(in_size=12, out_dim=60).to(device)
 seq_encoder = GRUEncoder(in_size=1, out_dim=60).to(device)
 symp_encoder = GRUEncoder(in_size=30, out_dim=60).to(device)
-static_encoder = FFN(
-    in_dim=24, hidden_layers=[60, 60], out_dim=60
-).to(device)
+static_encoder = FFN(in_dim=24, hidden_layers=[60, 60], out_dim=60).to(device)
 reg_encoder = EmbGCNEncoder(
     in_size=50, emb_dim=60, out_dim=60, num_layers=2, device=device
 ).to(device)
