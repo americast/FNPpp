@@ -49,7 +49,7 @@ def get_metrics(file_name, epiweek_now, ahead):
 
 sample_out = [True, False]
 lr = [0.001, 0.0001]
-epiweeks = [202204, 202208, 202212, 202216] + list(range(202220, 202241, 4))
+epiweeks = list(range(202101, 202153))
 ahead = [1, 2, 3, 4]
 
 metrics_df = pd.DataFrame(
@@ -72,7 +72,7 @@ for sample in sample_out:
             for ah in ahead:
                 save_model = f"ar_model_{week}_{sample}_{lr_}"
                 file_name = os.path.join(
-                    "hosp_predictions", f"{save_model}_predictions.pkl"
+                    "hosp_stable_predictions", f"{save_model}_predictions.pkl"
                 )
                 print(f"Getting metrics for {file_name}")
                 metrics = get_metrics(file_name, week, ah)
