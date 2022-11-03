@@ -38,6 +38,7 @@ parser.add_option("--sample_out", dest="sample_out", default=False, action="stor
 parser.add_option("--start", dest="start_day", default=-120, type="int")
 parser.add_option("--adaptive", dest="adaptive", default=False, action="store_true")
 parser.add_option("--segments", dest="segments", default=3, type="int")
+parser.add_option("--num_workers", dest="num_workers", default=4, type="int")
 
 (options, args) = parser.parse_args()
 epiweek_pres = options.epiweek_pres
@@ -55,6 +56,7 @@ patience = options.patience
 sample_out = options.sample_out
 adaptive = options.adaptive
 num_segments = options.segments
+num_workers = options.num_workers
 
 # First do sequence alone
 # Then add exo features
@@ -306,10 +308,18 @@ class SeqData(torch.utils.data.Dataset):
 train_dataset = SeqData(X_train, Y_train, L_train)
 val_dataset = SeqData(X_val, Y_val, L_val)
 train_loader = torch.utils.data.DataLoader(
-    train_dataset, batch_size=batch_size, shuffle=True
+    train_dataset,
+    batch_size=batch_size,
+    shuffle=True,
+    num_workers=num_workers,
+    pin_memory=True,
 )
 val_loader = torch.utils.data.DataLoader(
-    val_dataset, batch_size=batch_size, shuffle=True
+    val_dataset,
+    batch_size=batch_size,
+    shuffle=True,
+    num_workers=num_workers,
+    pin_memory=True,
 )
 
 if start_model != "None":

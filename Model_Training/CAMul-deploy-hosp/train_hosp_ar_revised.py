@@ -20,7 +20,9 @@ from models.multimodels import (
 from models.seqfnpmodels import RegressionSeqFNP
 
 parser = OptionParser()
-parser.add_option("-p", "--epiweek_pres", dest="epiweek_pres", default="202240", type="string")
+parser.add_option(
+    "-p", "--epiweek_pres", dest="epiweek_pres", default="202240", type="string"
+)
 parser.add_option("-e", "--epiweek", dest="epiweek", default="202140", type="string")
 parser.add_option("--epochs", dest="epochs", default=3500, type="int")
 parser.add_option("--lr", dest="lr", default=1e-3, type="float")
@@ -130,6 +132,7 @@ for st in states:
     with open(f"./data/hosp_data/saves/hosp_{st}_{epiweek_pres}.pkl", "rb") as fl:
         raw_data.append(pickle.load(fl))
 
+
 def diff_epiweeks(epiweek1, epiweek2):
     """
     Compute difference in epiweeks
@@ -138,7 +141,10 @@ def diff_epiweeks(epiweek1, epiweek2):
     year2, week2 = int(epiweek2[:4]), int(epiweek2[4:])
     return (year1 - year2) * 52 + week1 - week2
 
-raw_data = np.array(raw_data)[:, :diff_epiweeks(epiweek, epiweek_pres) + day_ahead, :]  # states x days x features
+
+raw_data = np.array(raw_data)[
+    :, : diff_epiweeks(epiweek, epiweek_pres) + day_ahead, :
+]  # states x days x features
 label_idx = include_cols.index("cdc_hospitalized")
 all_labels = raw_data[:, -day_ahead:, label_idx]
 print(f"Diff epiweeks: {diff_epiweeks(epiweek, epiweek_pres)}")
@@ -281,7 +287,10 @@ train_loader = torch.utils.data.DataLoader(
     train_dataset, batch_size=batch_size, shuffle=True
 )
 val_loader = torch.utils.data.DataLoader(
-    val_dataset, batch_size=batch_size, shuffle=True
+    val_dataset,
+    batch_size=batch_size,
+    shuffle=True,
+    pin_memory=True,
 )
 
 if start_model != "None":
