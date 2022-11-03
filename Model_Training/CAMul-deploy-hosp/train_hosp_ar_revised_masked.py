@@ -12,18 +12,16 @@ from covid_extract.hosp_consts import include_cols
 from models.multimodels import (
     EmbedEncoder,
     GRUEncoder2,
+    GRUEncoder,
     EmbGCNEncoder,
     LatentEncoder,
     CorrEncoder,
     Decoder,
 )
 from models.seqfnpmodels import RegressionSeqFNP
-from seq_segment import combine_seqs_masks, binary_segment, uniform_segment
 
 parser = OptionParser()
-parser.add_option(
-    "-p", "--epiweek_pres", dest="epiweek_pres", default="202240", type="string"
-)
+parser.add_option("-p", "--epiweek_pres", dest="epiweek_pres", default="202240", type="string")
 parser.add_option("-e", "--epiweek", dest="epiweek", default="202140", type="string")
 parser.add_option("--epochs", dest="epochs", default=3500, type="int")
 parser.add_option("--lr", dest="lr", default=1e-3, type="float")
@@ -33,11 +31,9 @@ parser.add_option("-s", "--seed", dest="seed", default=0, type="int")
 parser.add_option("-b", "--batch", dest="batch_size", default=128, type="int")
 parser.add_option("-m", "--save", dest="save_model", default="default", type="string")
 parser.add_option("--start_model", dest="start_model", default="None", type="string")
-parser.add_option("-c", "--cuda", dest="cuda", action="store_true")
+parser.add_option("-c", "--cuda", dest="cuda", default=True, action="store_true")
 parser.add_option("--sample_out", dest="sample_out", default=False, action="store_true")
 parser.add_option("--start", dest="start_day", default=-120, type="int")
-parser.add_option("--adaptive", dest="adaptive", default=False, action="store_true")
-parser.add_option("--segments", dest="segments", default=3, type="int")
 
 (options, args) = parser.parse_args()
 epiweek_pres = options.epiweek_pres
@@ -53,8 +49,6 @@ lr = options.lr
 epochs = options.epochs
 patience = options.patience
 sample_out = options.sample_out
-adaptive = options.adaptive
-num_segments = options.segments
 
 # First do sequence alone
 # Then add exo features
@@ -137,7 +131,6 @@ for st in states:
     with open(f"./data/hosp_data/saves/hosp_{st}_{epiweek_pres}.pkl", "rb") as fl:
         raw_data.append(pickle.load(fl))
 
-
 def diff_epiweeks(epiweek1, epiweek2):
     """
     Compute difference in epiweeks
@@ -146,12 +139,9 @@ def diff_epiweeks(epiweek1, epiweek2):
     year2, week2 = int(epiweek2[:4]), int(epiweek2[4:])
     return (year1 - year2) * 52 + week1 - week2
 
-
-raw_data = np.array(raw_data)[
-    :, : diff_epiweeks(epiweek, epiweek_pres) + day_ahead, :
-]  # states x days x features
+raw_data = np.array(raw_data)[:, :diff_epiweeks(epiweek, epiweek_pres) + day_ahead, :]  # states x days x features
 label_idx = include_cols.index("cdc_hospitalized")
-all_labels = raw_data[:, -day_ahead:, label_idx]
+all_labels = raw_data[:, -day_ahead: , label_idx]
 print(f"Diff epiweeks: {diff_epiweeks(epiweek, epiweek_pres)}")
 raw_data = raw_data[:, start_day:-day_ahead, :]
 
@@ -197,13 +187,13 @@ def prefix_sequences(seq, day_ahead=day_ahead):
     )
     lens = np.zeros((X.shape[0], X.shape[1]))
     for i in range(l - day_ahead):
-        X[i, : i + 1, :] = seq[: i + 1, :]
+        X[i, : i+1, :] = seq[: i + 1, :]
         Y[i] = seq[i + 1 : i + day_ahead + 1, label_idx]
         lens[i, i] = 1
     return X, Y, lens
 
 
-X, Y, L = [], [], []
+X, Y , L = [], [], []
 for i, st in enumerate(states):
     x, y, lens = prefix_sequences(raw_data[i])
     X.append(x)
@@ -219,20 +209,9 @@ X_train, Y_train, L_train = X_train[perm], Y_train[perm], L_train[perm]
 # Reference sequences
 X_ref = raw_data[:, :, label_idx]
 
-if adaptive:
-    X_ref = binary_segment(X_ref, num_segments)
-else:
-    X_ref = uniform_segment(X_ref, num_segments)
-X_ref, L_ref = combine_seqs_masks(X_ref)
-print(f" No. of ref sequences: {len(X_ref)}")
-
 # Divide val and train
 frac = 0.1
-X_val, Y_val, L_val = (
-    X_train[: int(len(X_train) * frac)],
-    Y_train[: int(len(X_train) * frac)],
-    L_train[: int(len(X_train) * frac)],
-)
+X_val, Y_val, L_val = X_train[: int(len(X_train) * frac)], Y_train[: int(len(X_train) * frac)], L_train[: int(len(X_train) * frac)]
 X_train, Y_train, L_train = (
     X_train[int(len(X_train) * frac) :],
     Y_train[int(len(X_train) * frac) :],
@@ -245,7 +224,7 @@ feat_enc = GRUEncoder2(
     in_size=len(include_cols),
     out_dim=60,
 ).to(device)
-seq_enc = GRUEncoder2(
+seq_enc = GRUEncoder(
     in_size=1,
     out_dim=60,
 ).to(device)
@@ -338,8 +317,8 @@ def train_step(data_loader, X, Y, X_ref):
     time_idx = torch.arange(0, day_ahead).long().to(device)
     for i, (x, y, l) in enumerate(data_loader):
         opt.zero_grad()
-        x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2), float_tensor(L_ref))
-        x_feat = feat_enc(x, l)
+        x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
+        x_feat = feat_enc(x,l)
         loss, yp, _ = fnp_enc(x_seq, x_feat, y, time_idx)
         yp = yp[X_ref.shape[0] :]
         loss.backward()
@@ -369,7 +348,7 @@ def val_step(data_loader, X, Y, X_ref, sample=True):
         time_idx = torch.arange(0, day_ahead).long().to(device)
         T_target = []
         for i, (x, y, l) in enumerate(data_loader):
-            x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2), float_tensor(L_ref))
+            x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
             x_feat = feat_enc(x, l)
             yp, _, vars, _, _, _, _ = fnp_enc.predict(x_feat, x_seq, time_idx, sample)
             val_err += torch.pow(yp - y, 2).mean().sqrt().detach().cpu().numpy()
@@ -389,7 +368,7 @@ def test_step(X, L, X_ref, samples=1000):
         YP = []
         time_idx = torch.arange(0, day_ahead).long().to(device)
         for i in range(samples):
-            x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2), float_tensor(L_ref))
+            x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
             x_feat = feat_enc(float_tensor(X), float_tensor(L))
             yp, _, vars, _, _, _, _ = fnp_enc.predict(
                 x_feat, x_seq, time_idx, sample=sample_out
@@ -420,7 +399,7 @@ for ep in range(epochs):
 load_model("./hosp_models")
 X_test = raw_data
 L_test = np.zeros((X_test.shape[0], X_test.shape[1]))
-L_test[:, -1] = 1.0
+L_test[:, -1] = 1.
 Y_test = test_step(X_test, L_test, X_ref, samples=2000).squeeze()
 
 Y_test_unnorm = scaler.inverse_transform_idx(Y_test, label_idx)
