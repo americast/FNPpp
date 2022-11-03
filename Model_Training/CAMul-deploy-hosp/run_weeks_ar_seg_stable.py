@@ -78,7 +78,7 @@ for sample in sample_out:
                 subprocess.run(
                     [
                         "python",
-                        "train_hosp_ar_revised.py",
+                        "train_hosp_ar_revised_seg.py",
                         "--epiweek",
                         str(week),
                         "--lr",
