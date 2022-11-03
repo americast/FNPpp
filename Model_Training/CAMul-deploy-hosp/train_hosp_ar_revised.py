@@ -140,7 +140,7 @@ def diff_epiweeks(epiweek1, epiweek2):
 
 raw_data = np.array(raw_data)[:, :diff_epiweeks(epiweek, epiweek_pres) + day_ahead, :]  # states x days x features
 label_idx = include_cols.index("cdc_hospitalized")
-all_labels = raw_data[:, -day_ahead, label_idx]
+all_labels = raw_data[:, -day_ahead:, label_idx]
 print(f"Diff epiweeks: {diff_epiweeks(epiweek, epiweek_pres)}")
 raw_data = raw_data[:, start_day:-day_ahead, :]
 
