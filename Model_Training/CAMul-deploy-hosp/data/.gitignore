@@ -1,2 +1,3 @@
 *.zip
 household_power_consumption/*
+!*.csv
