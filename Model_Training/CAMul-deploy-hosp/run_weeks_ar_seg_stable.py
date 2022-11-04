@@ -66,7 +66,7 @@ subprocess.run(
 
 sample_out = [True, False]
 lr = 0.001
-segments = [2, 3, 4, 8]
+segments = [8]
 adaptive = [True, False]
 
 for sample in sample_out:

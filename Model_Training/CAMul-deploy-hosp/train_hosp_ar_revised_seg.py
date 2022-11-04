@@ -290,18 +290,18 @@ def save_model(folder, file=save_model_name):
 # Build dataset
 class SeqData(torch.utils.data.Dataset):
     def __init__(self, X, Y, L):
-        self.X = X
-        self.Y = Y[:, :, None]
-        self.L = L
+        self.X = X.astype(np.float32)
+        self.Y = Y[:, :, None].astype(np.float32)
+        self.L = L.astype(np.float32)
 
     def __len__(self):
         return self.X.shape[0]
 
     def __getitem__(self, idx):
         return (
-            float_tensor(self.X[idx, :, :]),
-            float_tensor(self.Y[idx, :, :]),
-            float_tensor(self.L[idx, :]),
+            self.X[idx, :, :],
+            self.Y[idx, :, :],
+            self.L[idx, :],
         )
 
 
@@ -347,6 +347,7 @@ def train_step(data_loader, X, Y, X_ref):
     T_target = []
     time_idx = torch.arange(0, day_ahead).long().to(device)
     for i, (x, y, l) in enumerate(data_loader):
+        x, y, l = x.to(device), y.to(device), l.to(device)
         opt.zero_grad()
         x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2), float_tensor(L_ref))
         x_feat = feat_enc(x, l)
@@ -379,6 +380,7 @@ def val_step(data_loader, X, Y, X_ref, sample=True):
         time_idx = torch.arange(0, day_ahead).long().to(device)
         T_target = []
         for i, (x, y, l) in enumerate(data_loader):
+            x, y, l = x.to(device), y.to(device), l.to(device)
             x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2), float_tensor(L_ref))
             x_feat = feat_enc(x, l)
             yp, _, vars, _, _, _, _ = fnp_enc.predict(x_feat, x_seq, time_idx, sample)
