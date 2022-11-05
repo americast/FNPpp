@@ -63,7 +63,20 @@ mean_key = ['retail_and_recreation_percent_change_from_baseline',
        'parks_percent_change_from_baseline',
        'transit_stations_percent_change_from_baseline',
        'workplaces_percent_change_from_baseline',
-       'residential_percent_change_from_baseline']
+       'residential_percent_change_from_baseline', 'symptom:Fever',
+    'symptom:Low-grade fever',
+    'symptom:Cough',
+    'symptom:Sore throat',
+    'symptom:Headache',
+    'symptom:Fatigue',
+    'symptom:Vomiting',
+    'symptom:Diarrhea',
+    'symptom:Shortness of breath',
+    'symptom:Chest pain',
+    'symptom:Dizziness',
+    'symptom:Confusion',
+    'symptom:Generalized tonic–clonic seizure',
+    'symptom:Weakness']
 
 sum_key = ['cdc_hospitalized', 'death_jhu_incidence',
        'positiveIncr', 'cdc_negativeIncr', 'cdc_positiveIncr',
@@ -96,7 +109,20 @@ weekly_df = weekly_df.reindex(columns=['epiweek','region','fips',
        'Excess Estimate', 'death_jhu_cumulative', 'death_jhu_incidence',
        'positiveIncr_cumulative',
        'positiveIncr', 'cdc_negativeIncr', 'cdc_positiveIncr',
-       'cdc_total_resultsIncr'])
+       'cdc_total_resultsIncr','symptom:Fever',
+    'symptom:Low-grade fever',
+    'symptom:Cough',
+    'symptom:Sore throat',
+    'symptom:Headache',
+    'symptom:Fatigue',
+    'symptom:Vomiting',
+    'symptom:Diarrhea',
+    'symptom:Shortness of breath',
+    'symptom:Chest pain',
+    'symptom:Dizziness',
+    'symptom:Confusion',
+    'symptom:Generalized tonic–clonic seizure',
+    'symptom:Weakness'])
 weekly_df['epiweek'] = weekly_df['epiweek'].astype('int')
 
 
@@ -155,7 +181,20 @@ weekly_df = weekly_df.reindex(columns=['epiweek','region','fips',
        'Excess Estimate', 'death_jhu_cumulative', 'death_jhu_incidence',
        'positiveIncr_cumulative',
        'positiveIncr', 'cdc_negativeIncr', 'cdc_positiveIncr',
-       'cdc_total_resultsIncr'])
+       'cdc_total_resultsIncr','symptom:Fever',
+    'symptom:Low-grade fever',
+    'symptom:Cough',
+    'symptom:Sore throat',
+    'symptom:Headache',
+    'symptom:Fatigue',
+    'symptom:Vomiting',
+    'symptom:Diarrhea',
+    'symptom:Shortness of breath',
+    'symptom:Chest pain',
+    'symptom:Dizziness',
+    'symptom:Confusion',
+    'symptom:Generalized tonic–clonic seizure',
+    'symptom:Weakness'])
 
 weekly_df['epiweek'] = weekly_df['epiweek'].astype('int')
 weekly_df.to_csv(outputdir+outfile,index=False)

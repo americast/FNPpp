@@ -36,6 +36,7 @@ import numpy as np
 import math
 import glob
 import copy
+
 from datetime import datetime
 from datetime import timedelta
 from datetime import date
@@ -1075,7 +1076,7 @@ def read_vaccine_doses(inputdir,epiweek_date,state_index,dic_names_to_abbv):
     
     for ix,row in data.iterrows():
         w_idx=find_date_index(epiweek_date,row['Date'],date_string=2)
-        if row['Province_State'] in state_names and w_idx!=-1 and row['Vaccine_Type']=='All':
+        if row['Province_State'] in state_names and w_idx!=-1:
             #state_id=state_index[row['stabbr']] 
             state_id=state_index[dic_names_to_abbv[row['Province_State']]] 
             for c in cols:
@@ -1835,14 +1836,14 @@ def read_emergency(inputdir,epiweek_date,state_index,start_week,end_week):
 # In[70]:
 
 
-def merge_data_state(mobility,cdc_hosp,vacc,covidnet,excess,jhu,jhu_case,hosp_new_res,
+def merge_data_state(mobility,cdc_hosp,vacc,covidnet,excess,jhu,jhu_case,hosp_new_res,symptom,
                      cols_m,cols_cdc,cols_vacc,cols_net,cols_excess,
-                     cols_jhu,cols_jhu_case,cols_hosp_new_res,
+                     cols_jhu,cols_jhu_case,cols_hosp_new_res,cols_symptom,
                      state_fips,epiweek,epiweek_date,region_names,outputdir,outfilename):
     
     cols_common=['date','epiweek','region','fips']
     #all_cols=cols_common+cols_m+cols_a+cols_cdc+cols_d+cols_k+cols_q+cols_net+cols_hosp+cols_excess+cols_jhu+cols_survey+cols_v
-    all_cols=cols_common+cols_m+cols_cdc+cols_vacc+cols_net+cols_excess+cols_jhu+cols_jhu_case+cols_hosp_new_res
+    all_cols=cols_common+cols_m+cols_cdc+cols_vacc+cols_net+cols_excess+cols_jhu+cols_jhu_case+cols_hosp_new_res+cols_symptom
     #all_cols=cols_common+cols_m+cols_a+cols_d+cols_k+cols_net+cols_hosp+cols_excess+cols_jhu+cols_survey+cols_v
     print(all_cols)
     final_data=pd.DataFrame(columns=all_cols)
@@ -1883,7 +1884,9 @@ def merge_data_state(mobility,cdc_hosp,vacc,covidnet,excess,jhu,jhu_case,hosp_ne
             temp_data[c]=jhu_case[c][reg][:]
         for c in cols_hosp_new_res:
             temp_data[c]=hosp_new_res[c][reg][:]
-        
+        for c in cols_symptom:
+            temp_data[c]=symptom[c][reg][:]
+
         temp_data=temp_data[all_cols]
         final_data=final_data.append(temp_data,ignore_index=True)
     
@@ -2061,3 +2064,60 @@ def find_week_index(week,cur_date,date_string=True,strsplit='-'):
     print('week index not found:'+cur_date)
     print(cdate,cmonth,year)
     return -1
+
+
+def read_google_symptoms(inputdir,epiweek_date,state_index,dic_names_to_abbv):
+    data1 = pd.read_csv('2020_country_daily_2020_US_daily_symptoms_dataset.csv')
+    data2 = pd.read_csv('2021_country_daily_2021_US_daily_symptoms_dataset.csv')
+    data3 = pd.read_csv('2022_country_daily_2022_US_daily_symptoms_dataset.csv')
+    frames = [data1,data2,data3]
+    data = pd.concat(frames)
+    data=data.drop(data[data['sub_region_1'] == 'Hawaii'].index)
+    print('data')
+    columns = ['country_region', 'sub_region_1', 'date', "symptom:Fever",
+    "symptom:Low-grade fever",
+    "symptom:Cough",
+    "symptom:Sore throat",
+    "symptom:Headache",
+    "symptom:Fatigue",
+    "symptom:Vomiting",
+    "symptom:Diarrhea",
+    "symptom:Shortness of breath",
+    "symptom:Chest pain",
+    "symptom:Dizziness",
+    "symptom:Confusion",
+    "symptom:Generalized tonic–clonic seizure",
+    "symptom:Weakness"]
+    data = data[columns]
+    data['sub_region_1'] = data['sub_region_1'].apply(lambda x: "X" if (isinstance(x, float)) else dic_names_to_abbv[x])
+    print(data)
+    state_names=list(dic_names_to_abbv.keys())
+    num_states = len(state_names)
+    #print(cols)
+    cols = columns[3:]
+    week_cases={}
+    for c in cols:
+        week_cases[c]=np.empty((num_states,len(epiweek_date)))
+        week_cases[c][:][:]=np.nan
+        '''
+        week_cases[c]=np.zeros((num_states,len(epiweek_date)))
+        if (len(epiweek_date)-end_day)!=0:
+            total_len=len(epiweek_date)-end_day
+            week_cases[c][:][-total_len:]=np.nan
+        '''
+    print(cols)
+    #'''
+    for ix,row in data.iterrows():
+        state_id=state_index[row['sub_region_1']]
+        week_id=find_date_index(epiweek_date,str(row['date']),date_string=2)
+        if week_id!=-1:
+            for c in cols:
+                if pd.isnull(row[c])==False:
+                    if np.isnan(week_cases[c][state_id][week_id]):
+                            week_cases[c][state_id][week_id]=0
+                    week_cases[c][state_id][week_id]=row[c]
+    
+    unit_test(week_cases,cols,epiweek_date,state_index,"unit_test_date/google-symptoms.csv")
+    #'''
+    
+    return week_cases,cols

@@ -55,6 +55,12 @@ print(epiweek_date[end_day])
 mobility_state,cols_m,state_index,dic_names_to_abbv=read_mobility(data_path,epiweek_date,end_day)
 dic_names_to_abbv['United States']='X'
 
+print(dic_names_to_abbv)
+print(state_index)
+print('google symptoms')
+symptom, cols_symptom = read_google_symptoms(data_path,epiweek_date,state_index,dic_names_to_abbv)
+print(cols_symptom)
+
 
 print('JHU-cases')
 jhu_cases,cols_jhu_case=read_jhu_cases(data_path,epiweek_date,state_index,dic_names_to_abbv)
@@ -157,8 +163,8 @@ outputdir=data_path #"/Users/anikat/Downloads/covid-hospitalization-data/"
 outfile="covid-hospitalization-daily-all-state-merged_vEW"+ year_week_num+".csv"
 # merge and save
 merge_data_state(mobility_state,cdc_hosp,vacc,data_covidnet,excess_death,
-                 jhu_death,jhu_cases,hosp_new_res,
+                 jhu_death,jhu_cases,hosp_new_res,symptom,
                  cols_m,cols_cdc,cols_vacc,cols_net,
-                 cols_excess,cols_jhu,cols_jhu_case,cols_hosp_new_res,
+                 cols_excess,cols_jhu,cols_jhu_case,cols_hosp_new_res,cols_symptom,
                  state_fips,epiweek,week_save,state_names,outputdir,outfile)
 
