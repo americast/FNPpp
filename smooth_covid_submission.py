@@ -20,7 +20,7 @@ regions_list = ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC',
             'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT',
             'VA', 'WA', 'WV', 'WI', 'WY', 'X']
 
-def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=None,res_path='./results/',sub_path='./submissions-covid/'):
+def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=None,res_path='./results-covid/',sub_path='./submissions-covid/'):
     """
         @param write_submission: bool
         @param visualize: bool
@@ -136,7 +136,7 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
                             f.write(str(datex)+','+str((next-1)*7+i)+' day ahead inc '+target_name+','+str(target_end_date)+','+location_fips+','+'quantile'+','+"{:.4f}".format(q_c)+','+"{:.4f}".format(q_v)+'\n')
 
     if visualize:
-        figpath=f'./figures/ew{ew}/processed/'
+        figpath=f'./figures-covid/ew{ew}/processed/'
         if not os.path.exists(figpath):
             os.makedirs(figpath)
         if target_name=='death':
