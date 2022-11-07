@@ -129,7 +129,7 @@ for st in states:
         raw_data.append(pickle.load(fl))
 
 raw_data = np.array(raw_data)[:, start_day:, :]  # states x days x features
-label_idx = include_cols.index("cdc_hospitalized")
+label_idx = include_cols.index("cdc_flu_hosp")
 
 raw_data_unnorm = raw_data.copy()
 
