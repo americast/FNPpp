@@ -144,3 +144,31 @@ hosp_remove = []
 death_replace_last1 = []
 death_replace_last2 = []
 death_replace_last3 = []
+
+# ew202241 remove
+death_remove = []
+hosp_remove = [] 
+death_replace_last1 = ['SD']
+death_replace_last2 = []
+death_replace_last3 = []
+
+# ew202242 remove
+death_remove = []
+hosp_remove = [] 
+death_replace_last1 = ['IN','WI']
+death_replace_last2 = []
+death_replace_last3 = []
+
+# ew202244 remove
+death_remove = ['SD']
+hosp_remove = [] 
+death_replace_last1 = []
+death_replace_last2 = []
+death_replace_last3 = []
+
+# ew202245 remove
+# death_remove = []
+# hosp_remove = [] 
+# death_replace_last1 = []
+# death_replace_last2 = []
+# death_replace_last3 = []
