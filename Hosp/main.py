@@ -62,6 +62,7 @@ if __name__ == "__main__":
             args.pred_week = ew.cdcformat()
             try:
                 train_predict(args) 
+                # torch.cuda.empty_cache() 
             except Exception as e:
                 print(f'exception: did not work for {region} week {ew}: '+ str(e) + '\n')
                 traceback.print_exc()
