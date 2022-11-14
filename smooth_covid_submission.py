@@ -41,7 +41,7 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
 
     prev_cum = get_cumsum_region(datafile,region,target_name,ew)
      # max_val = get_max_value(datafile,region,target_name,ew)
-    scale_data = get_std_from_data(datafile,region,target_name,ew)
+    std_data = get_std_from_data(datafile,region,target_name,ew)
     last_data_vals = get_last_data_points(datafile,region,target_name,ew)
     print(region)
     point_preds = []
@@ -62,11 +62,14 @@ def parse(region,ew,target_name,suffix,daily,write_submission,visualize,data_ew=
     medians = ma_vec[-4:]
 
     """ scale data is tunable """
-    scale_data = scale_data/9
+    std_data = std_data/9
+
+    if region in REDUCE_UNCERTAINTY_REGIONS:
+        std_data = std_data/2
 
     for next in range(1,k_ahead+1):
         quantile_cuts = [0.01, 0.025] + list(np.arange(0.05, 0.95+0.05, 0.05,dtype=float)) + [0.975, 0.99]
-        predictions = std_interval_correction(medians[next-1],scale_data,next)
+        predictions = std_interval_correction(medians[next-1],std_data,next)
         quantiles = np.quantile(predictions, quantile_cuts)
         df = pd.read_csv(datafile, header=0)
         df = df[(df['region']==region)]
@@ -168,6 +171,17 @@ if __name__ == "__main__":
 
     suffix='M1_10_vEW'+str(ew)
     print(suffix)
+
+    team='GT'
+    model='DeepCOVID'
+    # date=Week.fromstring('2020'+str(ew)).enddate() + timedelta(days=2)
+    date=ew.enddate() + timedelta(days=2)
+    datex=date
+    date=date.strftime("%Y-%m-%d") 
+    sub_path='./submissions-covid/'
+    sub_file=sub_path+date+'-'+team+'-'+model+'.csv'
+    if os.path.exists(sub_file):
+        os.remove(sub_file)
 
     for region in temp_regions:
         parse(region,ew,target_name,suffix,daily,WRITE_SUBMISSION_FILE,PLOT)
