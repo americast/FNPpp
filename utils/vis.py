@@ -8,7 +8,7 @@ from epiweeks import Year, Week
 import os
 
 # set the start week for the visualization
-ew_vis_start='202210'
+ew_vis_start='202152'
 
 def visualize_region(target_name,region,predictions,datafile,opt,_min=None,_max=None,ew=19,suffix='',daily=False,fig_path='./figures/',show_rmse=False):
     """
