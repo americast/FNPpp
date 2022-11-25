@@ -32,10 +32,10 @@ parser.add_option("-b", "--batch", dest="batch_size", default=128, type="int")
 parser.add_option("-m", "--save", dest="save_model", default="default", type="string")
 parser.add_option("--start_model", dest="start_model", default="None", type="string")
 parser.add_option("-c", "--cuda", dest="cuda", action="store_true")
-parser.add_option("--sample_out", dest="sample_out", default=False, action="store_true")
+parser.add_option("--sample_out", dest="sample_out", default=True, action="store_true")
 parser.add_option("--start", dest="start_day", default=-120, type="int")
-parser.add_option("--adaptive", dest="adaptive", default=False, action="store_true")
-parser.add_option("--segments", dest="segments", default=3, type="int")
+parser.add_option("--adaptive", dest="adaptive", default=True, action="store_true")
+parser.add_option("--segments", dest="segments", default=4, type="int")
 parser.add_option("--num_workers", dest="num_workers", default=4, type="int")
 parser.add_option(
     "--from_scratch", dest="from_scratch", default=False, action="store_true"
