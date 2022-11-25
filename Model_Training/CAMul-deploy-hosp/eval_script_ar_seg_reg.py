@@ -53,7 +53,7 @@ def plot_round(ground_truth, mean_preds, std_preds, title):
 
 sample_out = [True, False]
 lr = [0.001, 0.0001]
-epiweeks = [202244, 202245, 202246]
+epiweeks = list(range(202101, 202153))
 ahead = [1, 2, 3, 4]
 
 sample_out = [True, False]
@@ -80,48 +80,43 @@ for sample in sample_out:
         for adapt in adaptive:
             for ah in ahead:
                 gt, mean, std = [], [], []
-                for state in states:
-                    for week in epiweeks:
-                        save_model = f"ar_seg_reg_real_{sample}_{segment}_{adapt}"
-                        file_name = os.path.join(
-                            "hosp_reg_predictions",
-                            f"{save_model}",
-                            state,
-                            week,
-                            "predictions.pkl",
-                        )
-                        print(f"Getting metrics for {file_name}")
-                        metrics = get_metrics(file_name, week, ah)
-
-                        if metrics is None:
-                            continue
-
-                        gt.append(metrics["ground_truth"])
-                        mean.append(metrics["mean_preds"])
-                        std.append(metrics["std_preds"])
-                        # print([metrics[m] for m in metrics_df.columns[-5:]])
-                        # metrics_df = metrics_df.append(
-                        #    {
-                        #        "sample_out": sample,
-                        #        "ahead": ah,
-                        #        "epiweek": week,
-                        #        "segments": segment,
-                        #        "adaptive": adapt,
-                        # "rmse": metrics["rmse"],
-                        # "nrmse": metrics["nrmse"],
-                        # "mape": metrics["mape"],
-                        # "crps": metrics["crps"],
-                        # "cs": metrics["cs"],
-                        #    },
-                        #    ignore_index=True,
-                        # )
-                    gt = np.array(gt).T
-                    mean = np.array(mean).T
-                    std = np.array(std).T
-                    print(mean, std)
-                    plot_round(
-                        gt, mean, std, f"ar_seg_stable_{sample}_{segment}_{adapt}/{ah}"
+                for week in epiweeks:
+                    save_model = f"ar_seg_model_{week}_{sample}_{segment}_{adapt}"
+                    file_name = os.path.join(
+                        "hosp_stable_predictions", f"{save_model}_predictions.pkl"
                     )
+                    print(f"Getting metrics for {file_name}")
+                    metrics = get_metrics(file_name, week, ah)
+
+                    if metrics is None:
+                        continue
+
+                    gt.append(metrics["ground_truth"])
+                    mean.append(metrics["mean_preds"])
+                    std.append(metrics["std_preds"])
+                    # print([metrics[m] for m in metrics_df.columns[-5:]])
+                    # metrics_df = metrics_df.append(
+                    #    {
+                    #        "sample_out": sample,
+                    #        "ahead": ah,
+                    #        "epiweek": week,
+                    #        "segments": segment,
+                    #        "adaptive": adapt,
+                    # "rmse": metrics["rmse"],
+                    # "nrmse": metrics["nrmse"],
+                    # "mape": metrics["mape"],
+                    # "crps": metrics["crps"],
+                    # "cs": metrics["cs"],
+                    #    },
+                    #    ignore_index=True,
+                    # )
+                gt = np.array(gt).T
+                mean = np.array(mean).T
+                std = np.array(std).T
+                print(mean, std)
+                plot_round(
+                    gt, mean, std, f"ar_seg_stable_{sample}_{segment}_{adapt}/{ah}"
+                )
 
 with open("ar_metrics_stable.pkl", "wb") as f:
     pickle.dump(metrics_df, f)
