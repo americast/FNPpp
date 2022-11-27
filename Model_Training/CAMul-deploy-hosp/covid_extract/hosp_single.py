@@ -33,7 +33,7 @@ filepath = os.path.join(
 df = pd.read_csv(filepath)
 df = df[df["region"] == region]
 
-df = df[include_cols]
+df = df[include_cols_flu]
 
 # Fill missing data
 df = df.fillna(method="ffill")

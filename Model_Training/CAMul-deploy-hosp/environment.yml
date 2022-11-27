@@ -17,9 +17,11 @@ dependencies:
   - dgl-cuda11.3
   - pip>=22.0
   - tqdm
+  - ruptures
   - pip:
     - epiweeks
     - properscoring
+    - aim
 # For development
   - ipykernel
   - jupyter

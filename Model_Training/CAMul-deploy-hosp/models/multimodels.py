@@ -163,6 +163,31 @@ class GRUEncoder(nn.Module):
         out_seq, _ = self.gru(batch)
         return out_seq[:, -1, :]
 
+class GRUEncoder2(nn.Module):
+    """
+    Encodes Sequences using GRU
+    """
+
+    def __init__(self, in_size: int, out_dim: int, bidirectional: bool = False):
+        super(GRUEncoder2, self).__init__()
+        self.gru = nn.GRU(
+            in_size, out_dim, batch_first=True, bidirectional=bidirectional
+        )
+
+    def forward(self, batch, mask):
+        r"""
+        ## Inputs
+
+        :param batch: Input vectors shape: [batch, seq_len, in_size]
+        :param lens: Input vectors seq lens shape: [batch, seq_len]
+
+        ----
+        ## Outputs
+
+        out: [batch, seq_len, out_dim]
+        """
+        out_seq, _ = self.gru(batch)
+        return (out_seq * mask.unsqueeze(-1)).sum(1)
 
 class EmbGCNEncoder(nn.Module):
     """
