@@ -34,6 +34,9 @@ parser.add_option("--start_model", dest="start_model", default="None", type="str
 parser.add_option("-c", "--cuda", dest="cuda", default=True, action="store_true")
 parser.add_option("--start", dest="start_day", default=-120, type="int")
 parser.add_option("-t", "--tb", action="store_true", dest="tb", default=False)
+parser.add_option("--sliding-window-size", dest="window_size", type="int", default=17)
+parser.add_option("--sliding-window-stride", dest="window_stride", type="int", default=15)
+parser.add_option("--num-best", dest="num_best", type="int", default=4)
 
 (options, args) = parser.parse_args()
 epiweek_pres = options.epiweek_pres
@@ -142,7 +145,7 @@ def diff_epiweeks(epiweek1, epiweek2):
 if diff_epiweeks(epiweek, epiweek_pres) > 0:
     raw_data = np.array(raw_data)
 else:    
-    raw_data = np.array(raw_data)[:, :diff_epiweeks(epiweek, epiweek_pres) + day_ahead, :]  # states x days x features
+    raw_data = np.array(raw_data)[:, :diff_epiweeks(epiweek, epiweek_pres) + day_ahead, :]  # states x days x featureslabel_idx = include_cols.index("cdc_hospitalized")
 label_idx = include_cols.index("cdc_hospitalized")
 all_labels = raw_data[:, -1, label_idx]
 print(f"Diff epiweeks: {diff_epiweeks(epiweek, epiweek_pres)}")
@@ -151,7 +154,7 @@ raw_data = raw_data[:, start_day:-day_ahead, :]
 raw_data_unnorm = raw_data.copy()
 
 if options.tb:
-    writer = SummaryWriter("runs/covid/covid_diffweek"+str(diff_epiweeks(epiweek, epiweek_pres))+"_weekahead_"+str(options.day_ahead))
+    writer = SummaryWriter("runs/covid/covid_slidingwindow_diffweek"+str(diff_epiweeks(epiweek, epiweek_pres))+"_weekahead_"+str(options.day_ahead)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride)+"_best_"+str(options.num_best))
 
 class ScalerFeat:
     def __init__(self, raw_data):
@@ -208,6 +211,12 @@ X_train, Y_train = X_train[perm], Y_train[perm]
 
 # Reference sequences
 X_ref = raw_data[:, :, label_idx]
+ilk = options.window_size
+# """
+to_concat = []
+for w in range(0, X_ref.shape[1] - ilk + 1, options.window_stride):
+    to_concat.append(X_ref[:,w:w + ilk])
+X_ref = np.concatenate(to_concat)
 
 # Divide val and train
 frac = 0.1
@@ -232,6 +241,8 @@ fnp_enc = RegressionFNP2(
     use_DAG=False,
     use_ref_labels=False,
     add_atten=False,
+    no_dag=True,
+    num_best=options.num_best
 ).to(device)
 
 

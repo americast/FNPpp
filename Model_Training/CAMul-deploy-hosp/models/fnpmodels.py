@@ -13,7 +13,10 @@ from models.utils import (
     one_hot,
 )
 from torch.distributions import Categorical
-
+import pudb
+import scipy
+import sys
+from itertools import product
 
 class TransformerAttn(nn.Module):
     """
@@ -679,6 +682,8 @@ class RegressionFNP2(nn.Module):
         use_ref_labels=True,
         use_DAG=True,
         add_atten=False,
+        no_dag=False,
+        num_best=None
     ):
         """
         :param dim_x: Dimensionality of the input
@@ -706,6 +711,8 @@ class RegressionFNP2(nn.Module):
         self.use_ref_labels = use_ref_labels
         self.use_DAG = use_DAG
         self.add_atten = add_atten
+        self.no_dag = no_dag
+        self.num_best=num_best
         # normalizes the graph such that inner products correspond to averages of the parents
         self.norm_graph = lambda x: x / (torch.sum(x, 1, keepdim=True) + 1e-8)
 
@@ -772,9 +779,23 @@ class RegressionFNP2(nn.Module):
             )
 
         # get A
-        A = sample_bipartite(
-            u[XR.size(0) :], u[0 : XR.size(0)], self.pairwise_g, training=self.training
-        )
+        if self.no_dag:
+            ref_sets = u[XR.size(0) :]
+            inp = u[0 : XR.size(0)]
+            A = torch.zeros(ref_sets.shape[0], inp.shape[0]).cuda()
+            all_idxs = torch.zeros((ref_sets.shape[0], inp.shape[0], inp.shape[1]*2)).cuda()
+            for idx in product(range(ref_sets.shape[0]), range(inp.size(0))):
+                all_idxs[idx[0], idx[1]] = torch.cat((ref_sets[idx[0]], inp[idx[1]]), dim = -1)
+
+            all_dists = torch.sum(torch.pow(all_idxs[:,:,:inp.shape[1]] - all_idxs[:,:,inp.shape[1]:], 2), dim=-1)
+            sorted_all_dists, sorted_idxs = torch.sort(all_dists, dim=0)
+            sorted_idxs_best = sorted_idxs[:self.num_best, :]
+            for idx in range(inp.shape[0]):
+                A[sorted_idxs_best[:,idx],idx]=1
+        else:
+            A = sample_bipartite(
+                u[XR.size(0) :], u[0 : XR.size(0)], self.pairwise_g, training=self.training
+            )
         if self.add_atten:
             HR, HM = H_all[0 : XR.size(0)], H_all[XR.size(0) :]
             atten = self.atten_layer(HM, HR)
@@ -870,9 +891,23 @@ class RegressionFNP2(nn.Module):
         pu = Normal(pu_mean_all, pu_logscale_all)
         u = pu.rsample()
 
-        A = sample_bipartite(
-            u[XR.size(0) :], u[0 : XR.size(0)], self.pairwise_g, training=False
-        )
+        if self.no_dag:
+            ref_sets = u[XR.size(0) :]
+            inp = u[0 : XR.size(0)]
+            A = torch.zeros(ref_sets.shape[0], inp.shape[0]).cuda()
+            all_idxs = torch.zeros((ref_sets.shape[0], inp.shape[0], inp.shape[1]*2)).cuda()
+            for idx in product(range(ref_sets.shape[0]), range(inp.size(0))):
+                all_idxs[idx[0], idx[1]] = torch.cat((ref_sets[idx[0]], inp[idx[1]]), dim = -1)
+
+            all_dists = torch.sum(torch.pow(all_idxs[:,:,:inp.shape[1]] - all_idxs[:,:,inp.shape[1]:], 2), dim=-1)
+            sorted_all_dists, sorted_idxs = torch.sort(all_dists, dim=0)
+            sorted_idxs_best = sorted_idxs[:self.num_best, :]
+            for idx in range(inp.shape[0]):
+                A[sorted_idxs_best[:,idx],idx]=1
+        else:
+            A = sample_bipartite(
+                u[XR.size(0) :], u[0 : XR.size(0)], self.pairwise_g, training=False
+            )
 
         if self.add_atten:
             HR, HM = H_all[0 : XR.size(0)], H_all[XR.size(0) :]
