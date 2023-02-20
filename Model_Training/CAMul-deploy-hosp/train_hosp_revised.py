@@ -4,12 +4,12 @@ import pickle
 import os
 
 from optparse import OptionParser
+from torch.utils.tensorboard import SummaryWriter
 
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from covid_extract.hosp_consts import include_cols_flu as include_cols
-
 from models.multimodels import (
     EmbedEncoder,
     GRUEncoder,
@@ -33,6 +33,7 @@ parser.add_option("-m", "--save", dest="save_model", default="default", type="st
 parser.add_option("--start_model", dest="start_model", default="None", type="string")
 parser.add_option("-c", "--cuda", dest="cuda", default=True, action="store_true")
 parser.add_option("--start", dest="start_day", default=-120, type="int")
+parser.add_option("-t", "--tb", action="store_true", dest="tb", default=False)
 
 (options, args) = parser.parse_args()
 epiweek_pres = options.epiweek_pres
@@ -47,7 +48,6 @@ batch_size = options.batch_size
 lr = options.lr
 epochs = options.epochs
 patience = options.patience
-
 # First do sequence alone
 # Then add exo features
 # Then TOD (as feature, as view)
@@ -57,6 +57,8 @@ patience = options.patience
 np.random.seed(seed)
 torch.manual_seed(seed)
 
+import random
+random.seed(seed)
 
 float_tensor = (
     torch.cuda.FloatTensor
@@ -145,6 +147,8 @@ raw_data = raw_data[:, start_day:-day_ahead, :]
 
 raw_data_unnorm = raw_data.copy()
 
+if options.tb:
+    writer = SummaryWriter("runs/covid/covid_diffweek"+str(diff_epiweeks(epiweek, epiweek_pres))+"_weekahead_"+str(options.day_ahead))
 
 class ScalerFeat:
     def __init__(self, raw_data):
@@ -368,6 +372,10 @@ for ep in range(epochs):
     print(f"Train loss: {train_loss:.4f}, Train err: {train_err:.4f}")
     val_err, yp, yt = val_step(val_loader, X_val, Y_val, X_ref)
     print(f"Val err: {val_err:.4f}")
+    if options.tb:
+        writer.add_scalar('Train/RMSE', train_err, ep)
+        writer.add_scalar('Train/loss', train_loss, ep)
+        writer.add_scalar('Val/RMSE', val_err, ep)
     if val_err < min_val_err:
         min_val_err = val_err
         min_val_epoch = ep
