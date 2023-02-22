@@ -17,7 +17,7 @@ import pudb
 import scipy
 import sys
 from itertools import product
-
+import numpy as np
 class TransformerAttn(nn.Module):
     """
     Module that calculates self-attention weights using transformer like attention
@@ -767,8 +767,8 @@ class RegressionFNP2(nn.Module):
 
         # get U
         pu_mean_all, pu_logscale_all = torch.split(self.p_u(H_all), self.dim_u, dim=1)
-        pu = Normal(pu_mean_all, pu_logscale_all)
-        u = pu.rsample()
+        pu_here = Normal(pu_mean_all, pu_logscale_all)
+        u = pu_here.rsample()
 
         # get G
         if self.use_DAG:
@@ -783,11 +783,21 @@ class RegressionFNP2(nn.Module):
             ref_sets = u[XR.size(0) :]
             inp = u[0 : XR.size(0)]
             A = torch.zeros(ref_sets.shape[0], inp.shape[0]).cuda()
-            all_idxs = torch.zeros((ref_sets.shape[0], inp.shape[0], inp.shape[1]*2)).cuda()
-            for idx in product(range(ref_sets.shape[0]), range(inp.size(0))):
-                all_idxs[idx[0], idx[1]] = torch.cat((ref_sets[idx[0]], inp[idx[1]]), dim = -1)
 
+            # all_idxs = torch.zeros((ref_sets.shape[0], inp.shape[0], inp.shape[1]*2)).cuda()
+            indices = []
+            for idx in product(range(ref_sets.shape[0]), range(inp.size(0))):
+                indices.append(idx)
+                # all_idxs[idx[0], idx[1]] = torch.cat((ref_sets[idx[0]], inp[idx[1]]), dim = -1)
+            # pu.db
+            indices = np.array(indices)
+            pairs = torch.cat([ref_sets[indices[:,0]], inp[indices[:,1]]], 1)
+            all_idxs = pairs.reshape([ref_sets.shape[0], inp.shape[0], -1])
+            # all_idxs.append(torch.cat((ref_sets[idx[0]], inp[idx[1]]), dim = -1))
             all_dists = torch.sum(torch.pow(all_idxs[:,:,:inp.shape[1]] - all_idxs[:,:,inp.shape[1]:], 2), dim=-1)
+            # pu.db
+            # median = torch.median(all_dists)
+            # A = (all_dists > median).int().float()
             sorted_all_dists, sorted_idxs = torch.sort(all_dists, dim=0)
             sorted_idxs_best = sorted_idxs[:self.num_best, :]
             for idx in range(inp.shape[0]):

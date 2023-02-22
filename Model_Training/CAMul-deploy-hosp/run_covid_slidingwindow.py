@@ -116,5 +116,7 @@ for pat in patience:
                             "-d",
                             str(ah),
                             "--tb",
+                            "--sliding-window-stride",
+                            "10",
                         ]
                     )
