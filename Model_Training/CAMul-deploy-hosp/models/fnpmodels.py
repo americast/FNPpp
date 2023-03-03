@@ -682,8 +682,6 @@ class RegressionFNP2(nn.Module):
         use_ref_labels=True,
         use_DAG=True,
         add_atten=False,
-        no_dag=False,
-        num_best=None
     ):
         """
         :param dim_x: Dimensionality of the input
@@ -711,8 +709,8 @@ class RegressionFNP2(nn.Module):
         self.use_ref_labels = use_ref_labels
         self.use_DAG = use_DAG
         self.add_atten = add_atten
-        self.no_dag = no_dag
-        self.num_best=num_best
+        # self.no_dag = no_dag
+        # self.num_best=num_best
         # normalizes the graph such that inner products correspond to averages of the parents
         self.norm_graph = lambda x: x / (torch.sum(x, 1, keepdim=True) + 1e-8)
 
@@ -761,14 +759,15 @@ class RegressionFNP2(nn.Module):
 
     def forward(self, XR, yR, XM, yM, kl_anneal=1.0):
         # sR = self.atten_ref(XR).mean(dim=0)
+        # XM is 128, 60 [GRU was applied on originally 128, 54, 5]
+        # XR is 51, 60  [GRU was applied on originally 128, 60]
         sR = XR.mean(dim=0)
-        X_all = torch.cat([XR, XM], dim=0)
-        H_all = self.cond_trans(X_all)
-
+        X_all = torch.cat([XR, XM], dim=0) # X_all is 179, 60
+        H_all = self.cond_trans(X_all) # H_all is 179, 100
         # get U
-        pu_mean_all, pu_logscale_all = torch.split(self.p_u(H_all), self.dim_u, dim=1)
-        pu_here = Normal(pu_mean_all, pu_logscale_all)
-        u = pu_here.rsample()
+        pu_mean_all, pu_logscale_all = torch.split(self.p_u(H_all), self.dim_u, dim=1) # self.p_u(H_all) is 179, 120
+        pu_here = Normal(pu_mean_all, pu_logscale_all) # each of the inputs are 179, 60
+        u = pu_here.rsample() # u is 179, 60
 
         # get G
         if self.use_DAG:
@@ -779,33 +778,33 @@ class RegressionFNP2(nn.Module):
             )
 
         # get A
-        if self.no_dag:
-            ref_sets = u[XR.size(0) :]
-            inp = u[0 : XR.size(0)]
-            A = torch.zeros(ref_sets.shape[0], inp.shape[0]).cuda()
+        # if self.no_dag:
+        #     ref_sets = u[XR.size(0) :]
+        #     inp = u[0 : XR.size(0)]
+        #     A = torch.zeros(ref_sets.shape[0], inp.shape[0]).cuda()
 
-            # all_idxs = torch.zeros((ref_sets.shape[0], inp.shape[0], inp.shape[1]*2)).cuda()
-            indices = []
-            for idx in product(range(ref_sets.shape[0]), range(inp.size(0))):
-                indices.append(idx)
-                # all_idxs[idx[0], idx[1]] = torch.cat((ref_sets[idx[0]], inp[idx[1]]), dim = -1)
-            # pu.db
-            indices = np.array(indices)
-            pairs = torch.cat([ref_sets[indices[:,0]], inp[indices[:,1]]], 1)
-            all_idxs = pairs.reshape([ref_sets.shape[0], inp.shape[0], -1])
-            # all_idxs.append(torch.cat((ref_sets[idx[0]], inp[idx[1]]), dim = -1))
-            all_dists = torch.sum(torch.pow(all_idxs[:,:,:inp.shape[1]] - all_idxs[:,:,inp.shape[1]:], 2), dim=-1)
-            # pu.db
-            # median = torch.median(all_dists)
-            # A = (all_dists > median).int().float()
-            sorted_all_dists, sorted_idxs = torch.sort(all_dists, dim=0)
-            sorted_idxs_best = sorted_idxs[:self.num_best, :]
-            for idx in range(inp.shape[0]):
-                A[sorted_idxs_best[:,idx],idx]=1
-        else:
-            A = sample_bipartite(
-                u[XR.size(0) :], u[0 : XR.size(0)], self.pairwise_g, training=self.training
-            )
+        #     # all_idxs = torch.zeros((ref_sets.shape[0], inp.shape[0], inp.shape[1]*2)).cuda()
+        #     indices = []
+        #     for idx in product(range(ref_sets.shape[0]), range(inp.size(0))):
+        #         indices.append(idx)
+        #         # all_idxs[idx[0], idx[1]] = torch.cat((ref_sets[idx[0]], inp[idx[1]]), dim = -1)
+        #     # pu.db
+        #     indices = np.array(indices)
+        #     pairs = torch.cat([ref_sets[indices[:,0]], inp[indices[:,1]]], 1)  ## torch.cat takes a lot of time, avoid it in a loop
+        #     all_idxs = pairs.reshape([ref_sets.shape[0], inp.shape[0], -1])
+        #     # all_idxs.append(torch.cat((ref_sets[idx[0]], inp[idx[1]]), dim = -1))
+        #     all_dists = torch.sum(torch.pow(all_idxs[:,:,:inp.shape[1]] - all_idxs[:,:,inp.shape[1]:], 2), dim=-1)
+        #     # pu.db
+        #     median = torch.median(all_dists)
+        #     A = (all_dists > median).int().float()
+        #     # sorted_all_dists, sorted_idxs = torch.sort(all_dists, dim=0)
+        #     # sorted_idxs_best = sorted_idxs[:self.num_best, :]
+        #     # for idx in range(inp.shape[0]):
+        #     #     A[sorted_idxs_best[:,idx],idx]=1
+        # else:
+        A = sample_bipartite(
+            u[XR.size(0) :], u[0 : XR.size(0)], self.pairwise_g, training=self.training
+        )
         if self.add_atten:
             HR, HM = H_all[0 : XR.size(0)], H_all[XR.size(0) :]
             atten = self.atten_layer(HM, HR)
@@ -860,10 +859,9 @@ class RegressionFNP2(nn.Module):
         else:
             log_pqz_R = torch.sum(pqz_all[0 : XR.size(0)])
             log_pqz_M = torch.sum(pqz_all[XR.size(0) :])
-
         final_rep = z if not self.use_plus else torch.cat([z, u], dim=1)
-        sR = sR.repeat(final_rep.shape[0], 1)
-        final_rep = torch.cat([sR, final_rep], dim=-1)
+        sR_2 = sR.repeat(final_rep.shape[0], 1)
+        final_rep = torch.cat([sR_2, final_rep], dim=-1)
 
         mean_y, logstd_y = torch.split(self.output(final_rep), 1, dim=1)
         logstd_y = torch.log(0.1 + 0.9 * F.softplus(logstd_y))
@@ -873,13 +871,13 @@ class RegressionFNP2(nn.Module):
 
         # logp(R)
         pyR = Normal(mean_yR, logstd_yR)
-        log_pyR = torch.sum(pyR.log_prob(yR))
+        # log_pyR = torch.sum(pyR.log_prob(yR))
 
         # logp(M|S)
         pyM = Normal(mean_yM, logstd_yM)
         log_pyM = torch.sum(pyM.log_prob(yM))
 
-        obj_R = (log_pyR + log_pqz_R) / float(self.num_M)
+        # obj_R = (log_pyR + log_pqz_R) / float(self.num_M)
         obj_M = (log_pyM + log_pqz_M) / float(XM.size(0))
 
         if self.use_ref_labels:
@@ -898,26 +896,36 @@ class RegressionFNP2(nn.Module):
 
         # get U
         pu_mean_all, pu_logscale_all = torch.split(self.p_u(H_all), self.dim_u, dim=1)
-        pu = Normal(pu_mean_all, pu_logscale_all)
-        u = pu.rsample()
+        pu_here = Normal(pu_mean_all, pu_logscale_all)
+        u = pu_here.rsample()
 
-        if self.no_dag:
-            ref_sets = u[XR.size(0) :]
-            inp = u[0 : XR.size(0)]
-            A = torch.zeros(ref_sets.shape[0], inp.shape[0]).cuda()
-            all_idxs = torch.zeros((ref_sets.shape[0], inp.shape[0], inp.shape[1]*2)).cuda()
-            for idx in product(range(ref_sets.shape[0]), range(inp.size(0))):
-                all_idxs[idx[0], idx[1]] = torch.cat((ref_sets[idx[0]], inp[idx[1]]), dim = -1)
+        # if self.no_dag:
+        #     ref_sets = u[XR.size(0) :]
+        #     inp = u[0 : XR.size(0)]
+        #     A = torch.zeros(ref_sets.shape[0], inp.shape[0]).cuda()
 
-            all_dists = torch.sum(torch.pow(all_idxs[:,:,:inp.shape[1]] - all_idxs[:,:,inp.shape[1]:], 2), dim=-1)
-            sorted_all_dists, sorted_idxs = torch.sort(all_dists, dim=0)
-            sorted_idxs_best = sorted_idxs[:self.num_best, :]
-            for idx in range(inp.shape[0]):
-                A[sorted_idxs_best[:,idx],idx]=1
-        else:
-            A = sample_bipartite(
-                u[XR.size(0) :], u[0 : XR.size(0)], self.pairwise_g, training=False
-            )
+        #     # all_idxs = torch.zeros((ref_sets.shape[0], inp.shape[0], inp.shape[1]*2)).cuda()
+        #     indices = []
+        #     for idx in product(range(ref_sets.shape[0]), range(inp.size(0))):
+        #         indices.append(idx)
+        #         # all_idxs[idx[0], idx[1]] = torch.cat((ref_sets[idx[0]], inp[idx[1]]), dim = -1)
+        #     # pu.db
+        #     indices = np.array(indices)
+        #     pairs = torch.cat([ref_sets[indices[:,0]], inp[indices[:,1]]], 1)  ## torch.cat takes a lot of time, avoid it in a loop
+        #     all_idxs = pairs.reshape([ref_sets.shape[0], inp.shape[0], -1])
+        #     # all_idxs.append(torch.cat((ref_sets[idx[0]], inp[idx[1]]), dim = -1))
+        #     all_dists = torch.sum(torch.pow(all_idxs[:,:,:inp.shape[1]] - all_idxs[:,:,inp.shape[1]:], 2), dim=-1)
+        #     # pu.db
+        #     median = torch.median(all_dists)
+        #     A = (all_dists > median).int().float()
+        #     # sorted_all_dists, sorted_idxs = torch.sort(all_dists, dim=0)
+        #     # sorted_idxs_best = sorted_idxs[:self.num_best, :]
+        #     # for idx in range(inp.shape[0]):
+        #     #     A[sorted_idxs_best[:,idx],idx]=1
+        # else:
+        A = sample_bipartite(
+            u[XR.size(0) :], u[0 : XR.size(0)], self.pairwise_g, training=False
+        )
 
         if self.add_atten:
             HR, HM = H_all[0 : XR.size(0)], H_all[XR.size(0) :]

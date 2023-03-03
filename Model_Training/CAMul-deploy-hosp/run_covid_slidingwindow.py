@@ -4,6 +4,9 @@ from tqdm import tqdm
 from optparse import OptionParser
 parser = OptionParser()
 parser.add_option("-e", "--epiweek", dest="epiweek", default=None, type="string")
+parser.add_option("-d", "--disease", dest="disease", default="covid", type="string")
+parser.add_option("--sliding-window-size", dest="window_size", type="int", default=17)
+parser.add_option("--sliding-window-stride", dest="window_stride", type="int", default=15)
 # epiweeks = list(range(202101, 202153))
 (options, args) = parser.parse_args()
 if options.epiweek is None:
@@ -87,7 +90,7 @@ sample_out = [True]
 # lr = [0.001, 0.0001]
 lr = [0.001]
 # patience = [1000, 3000]
-patience = [1000]
+patience = [500]
 # ahead = [1, 2, 3, 4]
 ahead = [4]
 
@@ -96,8 +99,8 @@ for pat in patience:
     for sample in sample_out:
         for lr_ in lr:
             for week in tqdm(epiweeks):
-                for ah in ahead:
-                    save_model = f"normal_model_{week}_{sample}_{lr_}_{pat}_{ah}"
+                for ah in ahead: 
+                    save_model = f"sliding_{options.disease}_model_{week}_weekahead_{ah}_wsize_{options.window_size}_wstride_{options.window_stride}"
                     print(f"Training {save_model}")
                     subprocess.run(
                         [
@@ -110,13 +113,15 @@ for pat in patience:
                             "--save",
                             save_model,
                             "--epochs",
-                            "5000",
+                            "1500",
                             "--patience",
                             str(pat),
                             "-d",
                             str(ah),
                             "--tb",
                             "--sliding-window-stride",
-                            "10",
+                            str(options.window_stride),
+                            "--sliding-window-size",
+                            str(options.window_size)
                         ]
                     )

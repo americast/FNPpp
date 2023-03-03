@@ -3,8 +3,11 @@ import pudb
 from tqdm import tqdm
 from optparse import OptionParser
 parser = OptionParser()
-parser.add_option("-e", "--epiweek", dest="epiweek", default=None, type="string")
-parser.add_option("-d", "--disease", dest="disease", default="covid", type="string")
+parser.add_option("-e", "--epiweek", dest="epiweek", default="202252", type="string")
+parser.add_option("-d", "--disease", dest="disease", default="flu", type="string")
+parser.add_option("--epochs", dest="epochs", default=1500, type="int")
+parser.add_option("--size", dest="window_size", type="int", default=17)
+parser.add_option("--stride", dest="window_stride", type="int", default=15)
 
 # epiweeks = list(range(202101, 202153))
 (options, args) = parser.parse_args()
@@ -90,8 +93,8 @@ sample_out = [True]
 lr = [0.001]
 # patience = [1000, 3000]
 patience = [500]
-# ahead = [1, 2, 3, 4]
-ahead = [1,2,3,4]
+ahead = [1, 2, 3, 4]
+# ahead = [4]
 
 
 for pat in patience:
@@ -99,7 +102,7 @@ for pat in patience:
         for lr_ in lr:
             for week in tqdm(epiweeks):
                 for ah in ahead:
-                    save_model = f"normal_disease_{options.disease}_epiweek_{week}_weekahead_{ah}"
+                    save_model = f"normal_disease_{options.disease}_epiweek_{week}_weekahead_{ah}_wsize_{options.window_size}_wstride_{options.window_stride}"
                     print(f"Training {save_model}")
                     subprocess.run(
                         [
@@ -112,11 +115,18 @@ for pat in patience:
                             "--save",
                             save_model,
                             "--epochs",
-                            "2",
+                            str(options.epochs),
                             "--patience",
                             str(pat),
                             "-d",
                             str(ah),
                             "--tb",
+                            "--disease",
+                            "flu",
+                            "-W",
+                            "--sliding-window-stride",
+                            str(options.window_stride),
+                            "--sliding-window-size",
+                            str(options.window_size),
                         ]
                     )

@@ -3,8 +3,9 @@ import pudb
 from tqdm import tqdm
 from optparse import OptionParser
 parser = OptionParser()
-parser.add_option("-e", "--epiweek", dest="epiweek", default=None, type="string")
-parser.add_option("-d", "--disease", dest="disease", default="covid", type="string")
+parser.add_option("-e", "--epiweek", dest="epiweek", default="202252", type="string")
+parser.add_option("-d", "--disease", dest="disease", default="flu", type="string")
+parser.add_option("--epochs", dest="epochs", default=1500, type="int")
 
 # epiweeks = list(range(202101, 202153))
 (options, args) = parser.parse_args()
@@ -90,8 +91,8 @@ sample_out = [True]
 lr = [0.001]
 # patience = [1000, 3000]
 patience = [500]
-# ahead = [1, 2, 3, 4]
-ahead = [1,2,3,4]
+ahead = [1, 2, 3, 4]
+# ahead = [4]
 
 
 for pat in patience:
@@ -112,11 +113,13 @@ for pat in patience:
                             "--save",
                             save_model,
                             "--epochs",
-                            "2",
+                            str(options.epochs),
                             "--patience",
                             str(pat),
                             "-d",
                             str(ah),
                             "--tb",
+                            "--disease",
+                            "flu",
                         ]
                     )

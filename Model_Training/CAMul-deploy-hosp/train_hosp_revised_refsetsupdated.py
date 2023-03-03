@@ -5,7 +5,7 @@ import os
 
 from optparse import OptionParser
 from torch.utils.tensorboard import SummaryWriter
-
+import itertools
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -19,6 +19,7 @@ from models.multimodels import (
     Decoder,
 )
 from models.fnpmodels import RegressionFNP2
+from tqdm import tqdm
 
 parser = OptionParser()
 parser.add_option("-p", "--epiweek_pres", dest="epiweek_pres", default="202240", type="string")
@@ -34,9 +35,10 @@ parser.add_option("--start_model", dest="start_model", default="None", type="str
 parser.add_option("-c", "--cuda", dest="cuda", default=True, action="store_true")
 parser.add_option("--start", dest="start_day", default=-120, type="int")
 parser.add_option("-t", "--tb", action="store_true", dest="tb", default=False)
+parser.add_option("-W", "--use-sliding-window", dest="sliding_window", default=False, action="store_true")
 parser.add_option("--sliding-window-size", dest="window_size", type="int", default=17)
 parser.add_option("--sliding-window-stride", dest="window_stride", type="int", default=15)
-parser.add_option("--num-best", dest="num_best", type="int", default=4)
+parser.add_option("--disease", dest="disease", type="string", default="covid")
 
 (options, args) = parser.parse_args()
 epiweek_pres = options.epiweek_pres
@@ -51,6 +53,7 @@ batch_size = options.batch_size
 lr = options.lr
 epochs = options.epochs
 patience = options.patience
+disease = options.disease
 # First do sequence alone
 # Then add exo features
 # Then TOD (as feature, as view)
@@ -146,7 +149,10 @@ if diff_epiweeks(epiweek, epiweek_pres) > 0:
     raw_data = np.array(raw_data)
 else:    
     raw_data = np.array(raw_data)[:, :diff_epiweeks(epiweek, epiweek_pres) + day_ahead, :]  # states x days x featureslabel_idx = include_cols.index("cdc_hospitalized")
-label_idx = include_cols.index("cdc_hospitalized")
+if options.disease == "flu":
+    label_idx = include_cols.index("cdc_flu_hosp")
+else:
+    label_idx = include_cols.index("cdc_hospitalized")
 all_labels = raw_data[:, -1, label_idx]
 print(f"Diff epiweeks: {diff_epiweeks(epiweek, epiweek_pres)}")
 raw_data = raw_data[:, start_day:-day_ahead, :]
@@ -154,7 +160,10 @@ raw_data = raw_data[:, start_day:-day_ahead, :]
 raw_data_unnorm = raw_data.copy()
 
 if options.tb:
-    writer = SummaryWriter("runs/covid/covid_slidingwindow_diffweek"+str(diff_epiweeks(epiweek, epiweek_pres))+"_weekahead_"+str(options.day_ahead)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride)+"_best_"+str(options.num_best))
+    if options.sliding_window:
+        writer = SummaryWriter("runs/"+disease+"/"+disease+"_slidingwindow_epiweek"+str(epiweek_pres)+"_weekahead_"+str(options.day_ahead)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
+    else:
+        writer = SummaryWriter("runs/"+disease+"/"+disease+"_normal_epiweek"+str(epiweek_pres)+"_weekahead_"+str(options.day_ahead)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
 
 class ScalerFeat:
     def __init__(self, raw_data):
@@ -202,8 +211,12 @@ for i, st in enumerate(states):
     x, y = prefix_sequences(raw_data[i])
     X.append(x)
     Y.append(y)
-
 X_train, Y_train = np.concatenate(X), np.concatenate(Y)
+num_repeat = int(X_train.shape[0]/len(states))
+states_train_unflattened = [list(itertools.repeat(st, num_repeat)) for st in states]
+states_train = []
+for st_here in states_train_unflattened:
+    states_train.extend(st_here)
 
 # Shuffle data
 perm = np.random.permutation(len(X_train))
@@ -211,19 +224,21 @@ X_train, Y_train = X_train[perm], Y_train[perm]
 
 # Reference sequences
 X_ref = raw_data[:, :, label_idx]
-ilk = options.window_size
-# """
-to_concat = []
-for w in range(0, X_ref.shape[1] - ilk + 1, options.window_stride):
-    to_concat.append(X_ref[:,w:w + ilk])
-X_ref = np.concatenate(to_concat)
+if options.sliding_window:
+    ilk = options.window_size
+    # """
+    to_concat = []
+    for w in range(0, X_ref.shape[1] - ilk + 1, options.window_stride):
+        to_concat.append(X_ref[:,w:w + ilk])
+    X_ref = np.concatenate(to_concat)
 
 # Divide val and train
 frac = 0.1
-X_val, Y_val = X_train[: int(len(X_train) * frac)], Y_train[: int(len(X_train) * frac)]
-X_train, Y_train = (
+X_val, Y_val, states_val = X_train[: int(len(X_train) * frac)], Y_train[: int(len(X_train) * frac)], states_train[: int(len(X_train) * frac)]
+X_train, Y_train, states_train = (
     X_train[int(len(X_train) * frac) :],
     Y_train[int(len(X_train) * frac) :],
+    states_train[int(len(X_train) * frac) :],
 )
 
 
@@ -241,8 +256,6 @@ fnp_enc = RegressionFNP2(
     use_DAG=False,
     use_ref_labels=False,
     add_atten=False,
-    no_dag=True,
-    num_best=options.num_best
 ).to(device)
 
 
@@ -283,18 +296,40 @@ class SeqData(torch.utils.data.Dataset):
             float_tensor(self.Y[idx]),
         )
 
+# Build dataset with state info
+class SeqDataWithStates(torch.utils.data.Dataset):
+    def __init__(self, X, Y, states):
+        self.X = X
+        self.Y = Y[:, None]
+        self.states = states
+
+    def __len__(self):
+        return self.X.shape[0]
+
+    def __getitem__(self, idx):
+        try:
+            return (
+                float_tensor(self.X[idx, :, :]),
+                float_tensor(self.Y[idx]),
+                self.states[idx],
+            )
+        except:
+            pu.db
 
 train_dataset = SeqData(X_train, Y_train)
 val_dataset = SeqData(X_val, Y_val)
+val_dataset_with_states = SeqDataWithStates(X_val, Y_val, states_val)
 train_loader = torch.utils.data.DataLoader(
     train_dataset, batch_size=batch_size, shuffle=True
 )
 val_loader = torch.utils.data.DataLoader(
     val_dataset, batch_size=batch_size, shuffle=True
 )
-
+val_loader_with_states = torch.utils.data.DataLoader(
+    val_dataset_with_states, batch_size=batch_size, shuffle=True
+)
 if start_model != "None":
-    load_model("./hosp_models", file=start_model)
+    load_model("./"+disease+"hosp_models", file=start_model)
     print("Loaded model from", start_model)
 
 opt = torch.optim.Adam(
@@ -358,6 +393,35 @@ def val_step(data_loader, X, Y, X_ref, sample=True):
             T_target.append(y.detach().cpu().numpy())
         return val_err / (i + 1), np.array(YP).ravel(), np.array(T_target).ravel()
 
+def val_step_with_states(data_loader, X, Y, X_ref, sample=True):
+    """
+    Validation step
+    """
+    with torch.set_grad_enabled(False):
+        feat_enc.eval()
+        seq_enc.eval()
+        fnp_enc.eval()
+        val_err = 0.0
+        YP = []
+        T_target = []
+        states_here = []
+        all_vars = []
+        for i, (x, y, st) in enumerate(data_loader):
+            x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
+            x_feat = feat_enc(x)
+            yp, _, vars, _, _, _, _ = fnp_enc.predict(
+                x_feat, x_seq, float_tensor(X_ref), sample
+            )
+            val_err += torch.pow(yp - y, 2).mean().sqrt().detach().cpu().numpy()
+            YP.extend(yp.detach().cpu().numpy().tolist())
+            T_target.extend(y.detach().cpu().numpy().tolist())
+            all_vars.extend(vars.detach().cpu().numpy().tolist())
+            states_here.extend(st)
+        YP = [x[0] for x in YP]
+        T_target = [x[0] for x in T_target]
+        all_vars = [x[0] for x in all_vars]
+        return val_err / (i + 1), np.array(YP, dtype=object).ravel(), np.array(T_target).ravel(), states_here, all_vars
+
 
 def test_step(X, X_ref, samples=1000):
     """
@@ -368,24 +432,28 @@ def test_step(X, X_ref, samples=1000):
         seq_enc.eval()
         fnp_enc.eval()
         YP = []
-        for i in range(samples):
+        As = []
+        for i in tqdm(range(samples)):
             x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
             x_feat = feat_enc(float_tensor(X))
-            yp, _, vars, _, _, _, _ = fnp_enc.predict(
+            yp, _, vars, _, _, _, A = fnp_enc.predict(
                 x_feat, x_seq, float_tensor(X_ref), sample=False
             )
             YP.append(yp.detach().cpu().numpy())
-        return np.array(YP)
+            As.append(A)
+        return np.array(YP), As
 
 
 min_val_err = np.inf
 min_val_epoch = 0
+all_results = {}
 for ep in range(epochs):
     print(f"Epoch {ep+1}")
     train_loss, train_err, yp, yt = train_step(train_loader, X_train, Y_train, X_ref)
     print(f"Train loss: {train_loss:.4f}, Train err: {train_err:.4f}")
-    val_err, yp, yt = val_step(val_loader, X_val, Y_val, X_ref)
+    val_err, yp, yt, st, vars = val_step_with_states(val_loader_with_states, X_val, Y_val, X_ref)
     print(f"Val err: {val_err:.4f}")
+    all_results[ep] = {"pred": yp, "gt": yt, "states": st, "vars": vars}
     if options.tb:
         writer.add_scalar('Train/RMSE', train_err, ep)
         writer.add_scalar('Train/loss', train_loss, ep)
@@ -393,21 +461,35 @@ for ep in range(epochs):
     if val_err < min_val_err:
         min_val_err = val_err
         min_val_epoch = ep
-        save_model("./hosp_models")
+        save_model("./"+disease+"hosp_models")
         print("Saved model")
     print()
     print()
     if ep > 100 and ep - min_val_epoch > patience:
         break
 
+if options.sliding_window:
+    os.makedirs(f"./"+disease+"_val_predictions_slidingwindow", exist_ok=True)
+    with open(f"./"+disease+"_val_predictions_slidingwindow/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
+        pickle.dump(all_results, f)
+else:
+    os.makedirs(f"./"+disease+"_val_predictions_normal", exist_ok=True)
+    with open(f"./"+disease+"_val_predictions_normal/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
+        pickle.dump(all_results, f)
+
 # Now we get results
-load_model("./hosp_models")
+load_model("./"+disease+"hosp_models")
 X_test = raw_data
-Y_test = test_step(X_test, X_ref, samples=2000).squeeze()
+Y_test, As = test_step(X_test, X_ref, samples=2000)
+Y_test = Y_test.squeeze()
 
 Y_test_unnorm = scaler.inverse_transform_idx(Y_test, label_idx)
-
 # Save predictions
-os.makedirs(f"./hosp_stable_predictions", exist_ok=True)
-with open(f"./hosp_stable_predictions/{save_model_name}_predictions.pkl", "wb") as f:
-    pickle.dump([Y_test_unnorm, all_labels], f)
+if options.sliding_window:
+    os.makedirs(f"./"+disease+"_hosp_stable_predictions_slidingwindow", exist_ok=True)
+    with open(f"./"+disease+"_hosp_stable_predictions_slidingwindow/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
+        pickle.dump([Y_test_unnorm, all_labels, raw_data_unnorm[:,:,label_idx], As], f)
+else:
+    os.makedirs(f"./"+disease+"_hosp_stable_predictions", exist_ok=True)
+    with open(f"./"+disease+"_hosp_stable_predictions/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
+        pickle.dump([Y_test_unnorm, all_labels, raw_data_unnorm[:,:,label_idx], As], f)
