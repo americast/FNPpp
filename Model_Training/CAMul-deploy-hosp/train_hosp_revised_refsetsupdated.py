@@ -146,7 +146,7 @@ def diff_epiweeks(epiweek1, epiweek2):
     return (year1 - year2) * 52 + week1 - week2
 
 if diff_epiweeks(epiweek, epiweek_pres) > 0:
-    raw_data = np.array(raw_data)
+    raw_data = np.array(raw_data)[:, :-5 + day_ahead, :]
 else:    
     raw_data = np.array(raw_data)[:, :diff_epiweeks(epiweek, epiweek_pres) + day_ahead, :]  # states x days x featureslabel_idx = include_cols.index("cdc_hospitalized")
 if options.disease == "flu":
@@ -163,7 +163,7 @@ if options.tb:
     if options.sliding_window:
         writer = SummaryWriter("runs/"+disease+"/"+disease+"_slidingwindow_epiweek"+str(epiweek_pres)+"_weekahead_"+str(options.day_ahead)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
     else:
-        writer = SummaryWriter("runs/"+disease+"/"+disease+"_normal_epiweek"+str(epiweek_pres)+"_weekahead_"+str(options.day_ahead)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
+        writer = SummaryWriter("runs/"+disease+"/"+disease+"_normal_epiweek"+str(epiweek_pres)+"_weekahead_"+str(options.day_ahead))
 
 class ScalerFeat:
     def __init__(self, raw_data):
@@ -440,7 +440,7 @@ def test_step(X, X_ref, samples=1000):
                 x_feat, x_seq, float_tensor(X_ref), sample=False
             )
             YP.append(yp.detach().cpu().numpy())
-            As.append(A)
+            As.append(A.cpu().numpy())
         return np.array(YP), As
 
 

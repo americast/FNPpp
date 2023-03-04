@@ -102,7 +102,7 @@ for pat in patience:
         for lr_ in lr:
             for week in tqdm(epiweeks):
                 for ah in ahead:
-                    save_model = f"normal_disease_{options.disease}_epiweek_{week}_weekahead_{ah}_wsize_{options.window_size}_wstride_{options.window_stride}"
+                    save_model = f"slidingwindow_disease_{options.disease}_epiweek_{week}_weekahead_{ah}_wsize_{options.window_size}_wstride_{options.window_stride}"
                     print(f"Training {save_model}")
                     subprocess.run(
                         [
