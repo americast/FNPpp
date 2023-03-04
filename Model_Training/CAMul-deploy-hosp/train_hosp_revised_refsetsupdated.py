@@ -39,6 +39,7 @@ parser.add_option("-W", "--use-sliding-window", dest="sliding_window", default=F
 parser.add_option("--sliding-window-size", dest="window_size", type="int", default=17)
 parser.add_option("--sliding-window-stride", dest="window_stride", type="int", default=15)
 parser.add_option("--disease", dest="disease", type="string", default="covid")
+parser.add_option("--preprocess", dest="preprocess", action="store_true", default=False)
 
 (options, args) = parser.parse_args()
 epiweek_pres = options.epiweek_pres
@@ -161,7 +162,10 @@ raw_data_unnorm = raw_data.copy()
 
 if options.tb:
     if options.sliding_window:
-        writer = SummaryWriter("runs/"+disease+"/"+disease+"_slidingwindow_epiweek"+str(epiweek_pres)+"_weekahead_"+str(options.day_ahead)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
+        if options.preprocess:
+            writer = SummaryWriter("runs/"+disease+"/"+disease+"_preprocessedslidingwindow_epiweek"+str(epiweek_pres)+"_weekahead_"+str(options.day_ahead)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
+        else:
+            writer = SummaryWriter("runs/"+disease+"/"+disease+"_slidingwindow_epiweek"+str(epiweek_pres)+"_weekahead_"+str(options.day_ahead)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
     else:
         writer = SummaryWriter("runs/"+disease+"/"+disease+"_normal_epiweek"+str(epiweek_pres)+"_weekahead_"+str(options.day_ahead))
 

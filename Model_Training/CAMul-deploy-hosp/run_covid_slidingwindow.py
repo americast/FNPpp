@@ -7,6 +7,7 @@ parser.add_option("-e", "--epiweek", dest="epiweek", default=None, type="string"
 parser.add_option("-d", "--disease", dest="disease", default="covid", type="string")
 parser.add_option("--sliding-window-size", dest="window_size", type="int", default=17)
 parser.add_option("--sliding-window-stride", dest="window_stride", type="int", default=15)
+parser.add_option("--preprocess", dest="preprocess", action="store_true", default=False)
 # epiweeks = list(range(202101, 202153))
 (options, args) = parser.parse_args()
 if options.epiweek is None:
@@ -100,28 +101,56 @@ for pat in patience:
         for lr_ in lr:
             for week in tqdm(epiweeks):
                 for ah in ahead: 
-                    save_model = f"sliding_{options.disease}_model_{week}_weekahead_{ah}_wsize_{options.window_size}_wstride_{options.window_stride}"
-                    print(f"Training {save_model}")
-                    subprocess.run(
-                        [
-                            "python",
-                            "train_hosp_revised_slidingwindow.py",
-                            "--epiweek",
-                            str(week),
-                            "--lr",
-                            str(lr_),
-                            "--save",
-                            save_model,
-                            "--epochs",
-                            "1500",
-                            "--patience",
-                            str(pat),
-                            "-d",
-                            str(ah),
-                            "--tb",
-                            "--sliding-window-stride",
-                            str(options.window_stride),
-                            "--sliding-window-size",
-                            str(options.window_size)
-                        ]
-                    )
+                    if options.preprocess:
+                        save_model = f"sliding_preprocessed_{options.disease}_model_{week}_weekahead_{ah}_wsize_{options.window_size}_wstride_{options.window_stride}"
+                        print(f"Training {save_model}")
+                        subprocess.run(
+                            [
+                                "python",
+                                "train_hosp_revised_slidingwindow.py",
+                                "--epiweek",
+                                str(week),
+                                "--lr",
+                                str(lr_),
+                                "--save",
+                                save_model,
+                                "--epochs",
+                                "1500",
+                                "--patience",
+                                str(pat),
+                                "-d",
+                                str(ah),
+                                "--tb",
+                                "--sliding-window-stride",
+                                str(options.window_stride),
+                                "--sliding-window-size",
+                                str(options.window_size),
+                                "--preprocess",
+                            ]
+                        )
+                    else:
+                        save_model = f"sliding_{options.disease}_model_{week}_weekahead_{ah}_wsize_{options.window_size}_wstride_{options.window_stride}"
+                        print(f"Training {save_model}")
+                        subprocess.run(
+                            [
+                                "python",
+                                "train_hosp_revised_slidingwindow.py",
+                                "--epiweek",
+                                str(week),
+                                "--lr",
+                                str(lr_),
+                                "--save",
+                                save_model,
+                                "--epochs",
+                                "1500",
+                                "--patience",
+                                str(pat),
+                                "-d",
+                                str(ah),
+                                "--tb",
+                                "--sliding-window-stride",
+                                str(options.window_stride),
+                                "--sliding-window-size",
+                                str(options.window_size)
+                            ]
+                        )
