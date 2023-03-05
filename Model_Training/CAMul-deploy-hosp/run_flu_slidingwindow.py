@@ -95,7 +95,7 @@ sample_out = [True]
 lr = [0.001]
 # patience = [1000, 3000]
 patience = [500]
-ahead = [1, 2, 3]
+ahead = [1]
 # ahead = [4]
 
 

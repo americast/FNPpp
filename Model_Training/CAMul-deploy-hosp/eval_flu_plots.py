@@ -26,8 +26,12 @@ if options.model_type == "normal":
     file_initials = "flu_hosp_stable_predictions/normal_disease_flu_epiweek_202252_weekahead_"
     writer = SummaryWriter("runs/flu/flu_normal_epiweek"+str(options.epiweek))
 else:
-    file_initials = "flu_hosp_stable_predictions_slidingwindow/slidingwindow_disease_flu_epiweek_202252_weekahead_"
-    writer = SummaryWriter("runs/flu/flu_slidingwindow_epiweek"+str(options.epiweek)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
+    if "preprocess" in options.model_type:
+        file_initials = "flu_hosp_stable_predictions_slidingwindow/slidingwindowpreprocessed_disease_flu_epiweek_202252_weekahead_"
+        writer = SummaryWriter("runs/flu/flu_slidingwindowpreprocessed_epiweek"+str(options.epiweek)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
+    else:
+        file_initials = "flu_hosp_stable_predictions_slidingwindow/slidingwindow_disease_flu_epiweek_202252_weekahead_"
+        writer = SummaryWriter("runs/flu/flu_slidingwindow_epiweek"+str(options.epiweek)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
 
 
 def get_metrics(file_name, epiweek_now, ahead):
@@ -210,7 +214,10 @@ for st, state in enumerate(states):
     if options.model_type == "normal":
         plt.savefig(f"plots_"+file_initials.split("_")[0]+"/"+state+".png")
     else:
-        plt.savefig(f"plots_"+file_initials.split("_")[0]+"/"+state+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)+".png")
+        if "preprocess" in options.model_type:
+            plt.savefig(f"plots_"+file_initials.split("_")[0]+"/"+state+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)+"_preprocessed.png")
+        else:
+            plt.savefig(f"plots_"+file_initials.split("_")[0]+"/"+state+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)+".png")
     # if state == "FL":
     #     pu.db
 
@@ -222,7 +229,10 @@ for ah in week_ahead:
     if options.model_type == "normal":
         plt.savefig(f"plots_"+file_initials.split("_")[0]+"/heatmap_"+str(ah)+".png")
     else:
-        plt.savefig(f"plots_"+file_initials.split("_")[0]+"/heatmap_"+str(ah)+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)+".png")
+        if "preprocess" in options.model_type:
+            plt.savefig(f"plots_"+file_initials.split("_")[0]+"/heatmap_"+str(ah)+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)+"_preprocessed.png")
+        else:
+            plt.savefig(f"plots_"+file_initials.split("_")[0]+"/heatmap_"+str(ah)+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)+".png")
 
 
 sys.exit(0)
