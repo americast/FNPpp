@@ -682,6 +682,7 @@ class RegressionFNP2(nn.Module):
         use_ref_labels=True,
         use_DAG=True,
         add_atten=False,
+        cnn=False
     ):
         """
         :param dim_x: Dimensionality of the input
@@ -709,6 +710,7 @@ class RegressionFNP2(nn.Module):
         self.use_ref_labels = use_ref_labels
         self.use_DAG = use_DAG
         self.add_atten = add_atten
+        self.cnn = cnn
         # self.no_dag = no_dag
         # self.num_best=num_best
         # normalizes the graph such that inner products correspond to averages of the parents
@@ -756,6 +758,12 @@ class RegressionFNP2(nn.Module):
         )
         if self.add_atten:
             self.atten_layer = LatentAtten(self.dim_h)
+        if self.cnn:
+            self.cnn_layer = nn.Sequential(
+                nn.Conv2d(120, 128, (5, 5), stride=(1, 1), padding="same"),
+                nn.Conv2d(128, 1, (5, 5), stride=(1, 1), padding="same"),
+                nn.Sigmoid()
+            )
 
     def forward(self, XR, yR, XM, yM, kl_anneal=1.0):
         # sR = self.atten_ref(XR).mean(dim=0)
@@ -802,9 +810,15 @@ class RegressionFNP2(nn.Module):
         #     # for idx in range(inp.shape[0]):
         #     #     A[sorted_idxs_best[:,idx],idx]=1
         # else:
-        A = sample_bipartite(
-            u[XR.size(0) :], u[0 : XR.size(0)], self.pairwise_g, training=self.training
-        )
+        if self.cnn:
+            A = sample_bipartite(
+                u[XR.size(0) :], u[0 : XR.size(0)], self.pairwise_g, training=self.training, cnn=self.cnn_layer
+            )
+        else:
+            A = sample_bipartite(
+                u[XR.size(0) :], u[0 : XR.size(0)], self.pairwise_g, training=self.training
+            )
+        # pu.db
         if self.add_atten:
             HR, HM = H_all[0 : XR.size(0)], H_all[XR.size(0) :]
             atten = self.atten_layer(HM, HR)
@@ -923,10 +937,14 @@ class RegressionFNP2(nn.Module):
         #     # for idx in range(inp.shape[0]):
         #     #     A[sorted_idxs_best[:,idx],idx]=1
         # else:
-        A = sample_bipartite(
-            u[XR.size(0) :], u[0 : XR.size(0)], self.pairwise_g, training=False
-        )
-
+        if self.cnn:
+            A = sample_bipartite(
+                u[XR.size(0) :], u[0 : XR.size(0)], self.pairwise_g, training=False, cnn=self.cnn_layer
+            )
+        else:
+            A = sample_bipartite(
+                u[XR.size(0) :], u[0 : XR.size(0)], self.pairwise_g, training=False
+            )
         if self.add_atten:
             HR, HM = H_all[0 : XR.size(0)], H_all[XR.size(0) :]
             atten = self.atten_layer(HM, HR)

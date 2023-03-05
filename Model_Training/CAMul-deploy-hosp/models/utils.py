@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import numpy as np
 from torch.distributions import Bernoulli
 from itertools import product
+import pudb
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 float_tensor = (
@@ -156,24 +157,30 @@ def sample_Clique(Z, g, training=True, temperature=0.3):
     return unsorted_G
 
 
-def sample_bipartite(Z1, Z2, g, training=True, temperature=0.3):
+def sample_bipartite(Z1, Z2, g, training=True, temperature=0.3, cnn=None):
     indices = []
     for element in product(range(Z1.size(0)), range(Z2.size(0))):
         indices.append(element)
     indices = np.array(indices)
     Z_pairs = torch.cat([Z1[indices[:, 0]], Z2[indices[:, 1]]], 1)
 
-    logits = g(Z_pairs)
-    if training:
-        p_edges = LogitRelaxedBernoulli(logits=logits, temperature=temperature)
-        A_vals = torch.sigmoid(p_edges.rsample())
+    if cnn is not None:
+        # pu.db
+        Z_pairs = Z_pairs.reshape((Z1.size(0), Z2.size(0), -1)).permute((2,0,1))
+        A = cnn(Z_pairs)
+        A = A.squeeze(0)
     else:
-        p_edges = Bernoulli(logits=logits)
-        A_vals = p_edges.sample()
+        logits = g(Z_pairs)
+        if training:
+            p_edges = LogitRelaxedBernoulli(logits=logits, temperature=temperature)
+            A_vals = torch.sigmoid(p_edges.rsample())
+        else:
+            p_edges = Bernoulli(logits=logits)
+            A_vals = p_edges.sample()
 
-    # embed the values to the adjacency matrix
-    A = float_tensor(Z1.size(0), Z2.size(0)).zero_()
-    A[indices[:, 0], indices[:, 1]] = A_vals.squeeze()
+        # embed the values to the adjacency matrix
+        A = float_tensor(Z1.size(0), Z2.size(0)).zero_()
+        A[indices[:, 0], indices[:, 1]] = A_vals.squeeze()
 
     return A
 

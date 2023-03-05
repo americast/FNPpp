@@ -20,6 +20,7 @@ from models.multimodels import (
 )
 from models.fnpmodels import RegressionFNP2
 from tqdm import tqdm
+from itertools import product
 
 parser = OptionParser()
 parser.add_option("-p", "--epiweek_pres", dest="epiweek_pres", default="202240", type="string")
@@ -40,6 +41,7 @@ parser.add_option("--sliding-window-size", dest="window_size", type="int", defau
 parser.add_option("--sliding-window-stride", dest="window_stride", type="int", default=15)
 parser.add_option("--disease", dest="disease", type="string", default="covid")
 parser.add_option("--preprocess", dest="preprocess", action="store_true", default=False)
+parser.add_option("--cnn", dest="cnn", action="store_true", default=False)
 
 (options, args) = parser.parse_args()
 epiweek_pres = options.epiweek_pres
@@ -55,6 +57,8 @@ lr = options.lr
 epochs = options.epochs
 patience = options.patience
 disease = options.disease
+if options.cnn:
+    disease = disease + "_cnn"
 # First do sequence alone
 # Then add exo features
 # Then TOD (as feature, as view)
@@ -228,13 +232,6 @@ X_train, Y_train = X_train[perm], Y_train[perm]
 
 # Reference sequences
 X_ref = raw_data[:, :, label_idx]
-if options.sliding_window:
-    ilk = options.window_size
-    # """
-    to_concat = []
-    for w in range(0, X_ref.shape[1] - ilk + 1, options.window_stride):
-        to_concat.append(X_ref[:,w:w + ilk])
-    X_ref = np.concatenate(to_concat)
 
 # Divide val and train
 frac = 0.1
@@ -244,6 +241,47 @@ X_train, Y_train, states_train = (
     Y_train[int(len(X_train) * frac) :],
     states_train[int(len(X_train) * frac) :],
 )
+
+def batched_compute_pcc(x, y):
+    """ R computation
+    :param  list  x: 1st list of random variables
+    :param  list  y: 2nd list of random variables
+    :return float r: correlation coefficient of X and Y
+    """
+    x = x.repeat(1,(y.shape[1]//x.shape[1])+1)[:,:y.shape[1]]
+    mean_x, mean_y  = torch.mean(x, axis=-1), torch.mean(y, axis=-1)
+    mean_x = mean_x.unsqueeze(1).repeat([1, x.shape[1]])
+    mean_y = mean_y.unsqueeze(1).repeat([1, y.shape[1]])
+    # mean_x, mean_y  = sum(x) / len(x), sum(y) / len(y)
+    cov = torch.sum(torch.multiply(x - mean_x, y - mean_y), axis=-1)
+    # cov   = sum([(a - mean_x) * (b - mean_y) for a, b in zip(x, y)])
+    var_x = torch.sum(torch.pow(x - mean_x, 2), axis=-1)
+    var_y = torch.sum(torch.pow(y - mean_y, 2), axis=-1)
+    # var_x = sum([(a - mean_x) ** 2 for a in x])
+    # var_y = sum([(b - mean_y) ** 2 for b in y])
+    return (cov / (torch.sqrt(var_x)+1e-6)) / (torch.sqrt(var_y)+1e-6)
+
+if options.sliding_window:
+    ilk = options.window_size
+    # """
+    to_concat = []
+    for w in range(0, X_ref.shape[1] - ilk + 1, options.window_stride):
+        to_concat.append(X_ref[:,w:w + ilk])
+    
+    X_ref_orig_shape = X_ref.shape
+    X_ref = np.concatenate(to_concat)
+    
+    if options.preprocess:
+        all_idxs = np.zeros((X_ref.shape[0], X_train.shape[0], X_ref.shape[1]+X_train.shape[1]))
+        for idx in tqdm(product(range(X_ref.shape[0]), range(X_train.shape[0]))):
+            all_idxs[idx[0], idx[1]] = np.concatenate((X_ref[idx[0]], X_train[idx[1]][:,label_idx]), axis = -1)
+        all_idxs = np.reshape(all_idxs,(-1, all_idxs.shape[-1]))
+        pccs = batched_compute_pcc(torch.tensor(all_idxs[:,:X_ref.shape[1]]), torch.tensor(all_idxs[:,X_ref.shape[1]:]))
+        pccs = pccs.numpy().reshape((X_ref.shape[0], X_train.shape[0]))
+        summed_pccs = np.sum(pccs, axis=-1)
+        best_ref_idxs = np.argsort(summed_pccs)[:X_ref_orig_shape[0]]
+        X_ref = X_ref[best_ref_idxs, :]
+        # pu.db
 
 
 # Build model
@@ -260,6 +298,7 @@ fnp_enc = RegressionFNP2(
     use_DAG=False,
     use_ref_labels=False,
     add_atten=False,
+    cnn=options.cnn
 ).to(device)
 
 
