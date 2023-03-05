@@ -9,6 +9,7 @@ parser.add_option("--epochs", dest="epochs", default=1500, type="int")
 parser.add_option("--size", dest="window_size", type="int", default=17)
 parser.add_option("--stride", dest="window_stride", type="int", default=15)
 parser.add_option("--preprocess", dest="preprocess", action="store_true", default=False)
+parser.add_option("--cnn", dest="cnn", action="store_true", default=False)
 
 
 # epiweeks = list(range(202101, 202153))
@@ -104,11 +105,20 @@ for pat in patience:
         for lr_ in lr:
             for week in tqdm(epiweeks):
                 for ah in ahead:
+                    to_run = []
+                    save_model = f"slidingwindow_disease_{options.disease}_epiweek_{week}_weekahead_{ah}_wsize_{options.window_size}_wstride_{options.window_stride}"
+
                     if options.preprocess:
                         save_model = f"slidingwindowpreprocessed_disease_{options.disease}_epiweek_{week}_weekahead_{ah}_wsize_{options.window_size}_wstride_{options.window_stride}"
-                        print(f"Training {save_model}")
-                        subprocess.run(
-                            [
+                        to_run = ["--preprocess"] + to_run
+                    
+                    if options.cnn:
+                        save_model = "cnn_" + save_model
+                        to_run = ["--cnn"] + to_run
+
+                    print(f"Training {save_model}")
+                    
+                    to_run =  [
                                 "python",
                                 "train_hosp_revised_refsetsupdated.py",
                                 "--epiweek",
@@ -131,35 +141,8 @@ for pat in patience:
                                 str(options.window_stride),
                                 "--sliding-window-size",
                                 str(options.window_size),
-                                "--preprocess",
-                            ]
-                        )
-                    else:
-                        save_model = f"slidingwindow_disease_{options.disease}_epiweek_{week}_weekahead_{ah}_wsize_{options.window_size}_wstride_{options.window_stride}"
-                        print(f"Training {save_model}")
-                        subprocess.run(
-                            [
-                                "python",
-                                "train_hosp_revised_refsetsupdated.py",
-                                "--epiweek",
-                                str(week),
-                                "--lr",
-                                str(lr_),
-                                "--save",
-                                save_model,
-                                "--epochs",
-                                str(options.epochs),
-                                "--patience",
-                                str(pat),
-                                "-d",
-                                str(ah),
-                                "--tb",
-                                "--disease",
-                                "flu",
-                                "-W",
-                                "--sliding-window-stride",
-                                str(options.window_stride),
-                                "--sliding-window-size",
-                                str(options.window_size),
-                            ]
-                        )
+                            ] + to_run
+                    
+                    subprocess.run(
+                        to_run
+                    )
