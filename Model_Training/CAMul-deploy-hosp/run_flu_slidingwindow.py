@@ -2,6 +2,7 @@ import subprocess
 import pudb
 from tqdm import tqdm
 from optparse import OptionParser
+import sys
 parser = OptionParser()
 parser.add_option("-e", "--epiweek", dest="epiweek", default="202252", type="string")
 parser.add_option("-d", "--disease", dest="disease", default="flu", type="string")
@@ -10,6 +11,7 @@ parser.add_option("--size", dest="window_size", type="int", default=17)
 parser.add_option("--stride", dest="window_stride", type="int", default=15)
 parser.add_option("--preprocess", dest="preprocess", action="store_true", default=False)
 parser.add_option("--cnn", dest="cnn", action="store_true", default=False)
+parser.add_option("--rag", dest="rag", action="store_true", default=False)
 
 
 # epiweeks = list(range(202101, 202153))
@@ -19,6 +21,11 @@ if options.epiweek is None:
 else:
     epiweeks = [options.epiweek]
 # pu.db
+
+if options.cnn and options.rag:
+    print("Cannot have both cnn and rag")
+    sys.exit(0)
+
 states = [
     "AL",
     "AK",
@@ -96,7 +103,7 @@ sample_out = [True]
 lr = [0.001]
 # patience = [1000, 3000]
 patience = [500]
-ahead = [1]
+ahead = [1,2,3]
 # ahead = [4]
 
 
@@ -115,6 +122,9 @@ for pat in patience:
                     if options.cnn:
                         save_model = "cnn_" + save_model
                         to_run = ["--cnn"] + to_run
+                    elif options.rag:
+                        save_model = "rag_" + save_model
+                        to_run = ["--rag"] + to_run
 
                     print(f"Training {save_model}")
                     

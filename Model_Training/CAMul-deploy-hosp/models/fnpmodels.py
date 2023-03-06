@@ -18,6 +18,8 @@ import scipy
 import sys
 from itertools import product
 import numpy as np
+from transformers import BertModel, BertConfig
+
 class TransformerAttn(nn.Module):
     """
     Module that calculates self-attention weights using transformer like attention
@@ -672,6 +674,7 @@ class RegressionFNP2(nn.Module):
         dim_x=1,
         dim_y=1,
         dim_h=50,
+        size_ref=128,
         transf_y=None,
         n_layers=1,
         use_plus=True,
@@ -682,7 +685,8 @@ class RegressionFNP2(nn.Module):
         use_ref_labels=True,
         use_DAG=True,
         add_atten=False,
-        cnn=False
+        cnn=False,
+        rag=False
     ):
         """
         :param dim_x: Dimensionality of the input
@@ -711,6 +715,8 @@ class RegressionFNP2(nn.Module):
         self.use_DAG = use_DAG
         self.add_atten = add_atten
         self.cnn = cnn
+        self.rag = rag
+        self.size_ref = size_ref
         # self.no_dag = no_dag
         # self.num_best=num_best
         # normalizes the graph such that inner products correspond to averages of the parents
@@ -764,6 +770,17 @@ class RegressionFNP2(nn.Module):
                 nn.Conv2d(128, 1, (5, 5), stride=(1, 1), padding="same"),
                 nn.Sigmoid()
             )
+        if self.rag:
+            self.rag_z1_linear = nn.Linear(60,768)
+            self.rag_z2_linear = nn.Linear(60,768)
+            self.bert_model_1 = BertModel.from_pretrained("bert-base-uncased")
+            if self.size_ref > 512:
+                configuration = BertConfig(max_position_embeddings=self.size_ref)
+                self.bert_model_2 = BertModel(configuration)
+            else:
+                self.bert_model_2 = BertModel.from_pretrained("bert-base-uncased")
+
+
 
     def forward(self, XR, yR, XM, yM, kl_anneal=1.0):
         # sR = self.atten_ref(XR).mean(dim=0)
@@ -810,7 +827,14 @@ class RegressionFNP2(nn.Module):
         #     # for idx in range(inp.shape[0]):
         #     #     A[sorted_idxs_best[:,idx],idx]=1
         # else:
-        if self.cnn:
+
+        if self.rag:
+            Z1 = self.rag_z1_linear(u[XR.size(0) :]).unsqueeze(0)
+            Z2 = self.rag_z2_linear(u[0 : XR.size(0)]).unsqueeze(0)
+            A1 = self.bert_model_1(inputs_embeds=Z1).last_hidden_state.squeeze(0)
+            A2 = self.bert_model_2(inputs_embeds=Z2).last_hidden_state.squeeze(0)
+            A = nn.Sigmoid()(torch.tensordot(A1,A2.T, dims=1)/1000)
+        elif self.cnn:
             A = sample_bipartite(
                 u[XR.size(0) :], u[0 : XR.size(0)], self.pairwise_g, training=self.training, cnn=self.cnn_layer
             )

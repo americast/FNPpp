@@ -14,7 +14,7 @@ import sys
 
 parser = OptionParser()
 parser.add_option("-e", "--epiweek", dest="epiweek", default="202252", type="string")
-parser.add_option("-m", "--model_type", dest="model_type", default="normal", type="string")
+parser.add_option("-m", "--model_type", dest="model_type", default="normal", type="string") # normal, cnn, slidingwindow, preprocess, slidingwindow_cnn
 parser.add_option("--size", dest="window_size", default=10, type="int")
 parser.add_option("--stride", dest="window_stride", default=10, type="int")
 # parser.add_option("-f", "--files", dest="file_names", default="sliding_model_202252_True_0.001_500_4", type="string")
@@ -25,11 +25,16 @@ parser.add_option("--stride", dest="window_stride", default=10, type="int")
 if options.model_type == "normal":
     file_initials = "flu_hosp_stable_predictions/normal_disease_flu_epiweek_202252_weekahead_"
     writer = SummaryWriter("runs/flu/flu_normal_epiweek"+str(options.epiweek))
-else:
-    if "preprocess" in options.model_type:
+elif "slidingwindow" in options.model_type and "cnn" in options.model_type:
+        file_initials = "flu_cnn_hosp_stable_predictions_slidingwindow/cnn_slidingwindow_disease_flu_epiweek_202252_weekahead_"
+        writer = SummaryWriter("runs/flu/flu_cnn_slidingwindowpreprocessed_epiweek"+str(options.epiweek)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))        
+elif "preprocess" in options.model_type:
         file_initials = "flu_hosp_stable_predictions_slidingwindow/slidingwindowpreprocessed_disease_flu_epiweek_202252_weekahead_"
         writer = SummaryWriter("runs/flu/flu_slidingwindowpreprocessed_epiweek"+str(options.epiweek)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
-    else:
+elif "cnn" in options.model_type:
+        file_initials = "flu_cnn_hosp_stable_predictions/cnn_disease_flu_epiweek_202252_weekahead_"
+        writer = SummaryWriter("runs/flu/flu_cnn_disease_flu_epiweek"+str(options.epiweek))
+else:
         file_initials = "flu_hosp_stable_predictions_slidingwindow/slidingwindow_disease_flu_epiweek_202252_weekahead_"
         writer = SummaryWriter("runs/flu/flu_slidingwindow_epiweek"+str(options.epiweek)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
 
@@ -171,11 +176,11 @@ for state in states:
 
 # counter = -1
 for ah in week_ahead:
-    if options.model_type == "normal":
-        with open(file_initials+str(ah)+"_predictions.pkl", "rb") as f:
+    if "preprocess" in options.model_type or "slidingwindow" in options.model_type:
+        with open(file_initials+str(ah)+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)+"_predictions.pkl", "rb") as f:
             data_pickle = pickle.load(f)
     else:
-        with open(file_initials+str(ah)+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)+"_predictions.pkl", "rb") as f:
+        with open(file_initials+str(ah)+"_predictions.pkl", "rb") as f:
             data_pickle = pickle.load(f)
 
     for st, state in enumerate(states):
@@ -211,13 +216,23 @@ for st, state in enumerate(states):
     plt.fill_between(np.arange(len(yp)), yp + dev, yp - dev, color="blue", alpha=0.2)
     plt.plot(yt, label="True Value", color="green")
     plt.legend()
-    if options.model_type == "normal":
-        plt.savefig(f"plots_"+file_initials.split("_")[0]+"/"+state+".png")
-    else:
-        if "preprocess" in options.model_type:
-            plt.savefig(f"plots_"+file_initials.split("_")[0]+"/"+state+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)+"_preprocessed.png")
+
+
+    plot_name = f"plots_flu/"+state
+    if options.model_type is not "normal":
+        if "cnn" in options.model_type and "slidingwindow" in options.model_type:
+            plot_name = plot_name+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)+"_cnn"
+        elif "cnn" in options.model_type:
+             plot_name = plot_name + "_cnn"
+        elif "preprocess" in options.model_type:
+            plot_name = plot_name+"_preprocessed"
         else:
-            plt.savefig(f"plots_"+file_initials.split("_")[0]+"/"+state+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)+".png")
+            plot_name = f"plots_flu/"+state+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)
+       
+    plot_name = plot_name + ".png"
+    # pu.db
+    plt.savefig(plot_name)
+        
     # if state == "FL":
     #     pu.db
 
@@ -226,13 +241,16 @@ for ah in week_ahead:
     plt.figure(len(states) + ah)
     plt.imshow(heat_map_means[ah], cmap='viridis')
     plt.colorbar()
-    if options.model_type == "normal":
-        plt.savefig(f"plots_"+file_initials.split("_")[0]+"/heatmap_"+str(ah)+".png")
+    if "preprocess" in options.model_type:
+        plt.savefig(f"plots_"+file_initials.split("_")[0]+"/heatmap_"+str(ah)+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)+"_preprocessed.png")
+    elif "cnn" in options.model_type and "slidingwindow" in options.model_type:
+        plt.savefig(f"plots_"+file_initials.split("_")[0]+"/heatmap_"+str(ah)+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)+"_cnn.png")
+    elif "slidingwindow" in options.model_type:
+        plt.savefig(f"plots_"+file_initials.split("_")[0]+"/heatmap_"+str(ah)+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)+".png")
+    elif "cnn" in options.model_type:
+        plt.savefig(f"plots_"+file_initials.split("_")[0]+"/heatmap_"+str(ah)+"_cnn.png")
     else:
-        if "preprocess" in options.model_type:
-            plt.savefig(f"plots_"+file_initials.split("_")[0]+"/heatmap_"+str(ah)+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)+"_preprocessed.png")
-        else:
-            plt.savefig(f"plots_"+file_initials.split("_")[0]+"/heatmap_"+str(ah)+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)+".png")
+        plt.savefig(f"plots_"+file_initials.split("_")[0]+"/heatmap_"+str(ah)+".png")
 
 
 sys.exit(0)

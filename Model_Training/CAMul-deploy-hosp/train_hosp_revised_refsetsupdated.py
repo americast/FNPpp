@@ -1,4 +1,5 @@
 from curses import raw
+import sys
 import numpy as np
 import pickle
 import os
@@ -42,6 +43,7 @@ parser.add_option("--sliding-window-stride", dest="window_stride", type="int", d
 parser.add_option("--disease", dest="disease", type="string", default="covid")
 parser.add_option("--preprocess", dest="preprocess", action="store_true", default=False)
 parser.add_option("--cnn", dest="cnn", action="store_true", default=False)
+parser.add_option("--rag", dest="rag", action="store_true", default=False)
 
 (options, args) = parser.parse_args()
 epiweek_pres = options.epiweek_pres
@@ -57,8 +59,14 @@ lr = options.lr
 epochs = options.epochs
 patience = options.patience
 disease = options.disease
+if options.rag and options.cnn:
+    print("Cannot have cnn and rag together")
+    sys.exit(0)
+    
 if options.cnn:
     disease = disease + "_cnn"
+if options.rag:
+    disease = disease + "_rag"
 # First do sequence alone
 # Then add exo features
 # Then TOD (as feature, as view)
@@ -291,6 +299,7 @@ fnp_enc = RegressionFNP2(
     dim_x=60,
     dim_y=1,
     dim_h=100,
+    size_ref=X_ref.shape[0],
     n_layers=3,
     num_M=batch_size,
     dim_u=60,
@@ -298,7 +307,8 @@ fnp_enc = RegressionFNP2(
     use_DAG=False,
     use_ref_labels=False,
     add_atten=False,
-    cnn=options.cnn
+    cnn=options.cnn,
+    rag=options.rag,
 ).to(device)
 
 
@@ -504,8 +514,8 @@ for ep in range(epochs):
     if val_err < min_val_err:
         min_val_err = val_err
         min_val_epoch = ep
-        save_model("./"+disease+"hosp_models")
-        print("Saved model")
+        # save_model("./"+disease+"hosp_models")
+        # print("Saved model")
     print()
     print()
     if ep > 100 and ep - min_val_epoch > patience:

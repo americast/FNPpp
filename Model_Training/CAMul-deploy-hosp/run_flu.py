@@ -7,6 +7,7 @@ parser.add_option("-e", "--epiweek", dest="epiweek", default="202252", type="str
 parser.add_option("-d", "--disease", dest="disease", default="flu", type="string")
 parser.add_option("--epochs", dest="epochs", default=1500, type="int")
 parser.add_option("--cnn", dest="cnn", action="store_true", default=False)
+parser.add_option("--rag", dest="rag", action="store_true", default=False)
 
 # epiweeks = list(range(202101, 202153))
 (options, args) = parser.parse_args()
@@ -126,7 +127,31 @@ for pat in patience:
                                 "--cnn",
                             ]
                         )
-
+                    elif options.rag:
+                        save_model = f"rag_disease_{options.disease}_epiweek_{week}_weekahead_{ah}"
+                        print(f"Training {save_model}")
+                        subprocess.run(
+                            [
+                                "python",
+                                "train_hosp_revised_refsetsupdated.py",
+                                "--epiweek",
+                                str(week),
+                                "--lr",
+                                str(lr_),
+                                "--save",
+                                save_model,
+                                "--epochs",
+                                str(options.epochs),
+                                "--patience",
+                                str(pat),
+                                "-d",
+                                str(ah),
+                                "--tb",
+                                "--disease",
+                                "flu",
+                                "--rag",
+                            ]
+                        )
                     else:
                         save_model = f"normal_disease_{options.disease}_epiweek_{week}_weekahead_{ah}"
                         print(f"Training {save_model}")
