@@ -24,10 +24,10 @@ from tqdm import tqdm
 from itertools import product
 
 parser = OptionParser()
-parser.add_option("-p", "--epiweek_pres", dest="epiweek_pres", default="202240", type="string")
-parser.add_option("-e", "--epiweek", dest="epiweek", default="202140", type="string")
+# parser.add_option("-p", "--epiweek_pres", dest="epiweek_pres", default="202240", type="string")
+# parser.add_option("-e", "--epiweek", dest="epiweek", default="202140", type="string")
 parser.add_option("--epochs", dest="epochs", default=3500, type="int")
-parser.add_option("--lr", dest="lr", default=1e-3, type="float")
+parser.add_option("--lr", dest="lr", default=1e-4, type="float")
 parser.add_option("--patience", dest="patience", default=1000, type="int")
 parser.add_option("-d", "--day", dest="day_ahead", default=1, type="int")
 parser.add_option("-s", "--seed", dest="seed", default=0, type="int")
@@ -40,14 +40,14 @@ parser.add_option("-t", "--tb", action="store_true", dest="tb", default=False)
 parser.add_option("-W", "--use-sliding-window", dest="sliding_window", default=False, action="store_true")
 parser.add_option("--sliding-window-size", dest="window_size", type="int", default=17)
 parser.add_option("--sliding-window-stride", dest="window_stride", type="int", default=15)
-parser.add_option("--disease", dest="disease", type="string", default="covid")
+parser.add_option("--disease", dest="disease", type="string", default="power")
 parser.add_option("--preprocess", dest="preprocess", action="store_true", default=False)
 parser.add_option("--cnn", dest="cnn", action="store_true", default=False)
 parser.add_option("--rag", dest="rag", action="store_true", default=False)
 
 (options, args) = parser.parse_args()
-epiweek_pres = options.epiweek_pres
-epiweek = options.epiweek
+# epiweek_pres = options.epiweek_pres
+# epiweek = options.epiweek
 day_ahead = options.day_ahead
 seed = options.seed
 save_model_name = options.save_model
@@ -91,96 +91,96 @@ device = "cuda" if (cuda and torch.cuda.is_available()) else "cpu"
 
 # Get dataset as numpy arrays
 
-states = [
-    "AL",
-    "AK",
-    "AZ",
-    "AR",
-    "CA",
-    "CO",
-    "CT",
-    "DE",
-    "DC",
-    "FL",
-    "GA",
-    "ID",
-    "IL",
-    "IN",
-    "IA",
-    "KS",
-    "KY",
-    "LA",
-    "ME",
-    "MD",
-    "MA",
-    "MI",
-    "MN",
-    "MS",
-    "MO",
-    "MT",
-    "NE",
-    "NV",
-    "NH",
-    "NJ",
-    "NM",
-    "NY",
-    "NC",
-    "ND",
-    "OH",
-    "OK",
-    "OR",
-    "PA",
-    "RI",
-    "SC",
-    "SD",
-    "TN",
-    "TX",
-    "UT",
-    "VT",
-    "VA",
-    "WA",
-    "WV",
-    "WI",
-    "WY",
-    "X",
-]
+# states = [
+#     "AL",
+#     "AK",
+#     "AZ",
+#     "AR",
+#     "CA",
+#     "CO",
+#     "CT",
+#     "DE",
+#     "DC",
+#     "FL",
+#     "GA",
+#     "ID",
+#     "IL",
+#     "IN",
+#     "IA",
+#     "KS",
+#     "KY",
+#     "LA",
+#     "ME",
+#     "MD",
+#     "MA",
+#     "MI",
+#     "MN",
+#     "MS",
+#     "MO",
+#     "MT",
+#     "NE",
+#     "NV",
+#     "NH",
+#     "NJ",
+#     "NM",
+#     "NY",
+#     "NC",
+#     "ND",
+#     "OH",
+#     "OK",
+#     "OR",
+#     "PA",
+#     "RI",
+#     "SC",
+#     "SD",
+#     "TN",
+#     "TX",
+#     "UT",
+#     "VT",
+#     "VA",
+#     "WA",
+#     "WV",
+#     "WI",
+#     "WY",
+#     "X",
+# ]
 
-raw_data = []
-for st in states:
-    with open(f"./data/hosp_data/saves/hosp_{st}_{epiweek_pres}.pkl", "rb") as fl:
-        raw_data.append(pickle.load(fl))
+# raw_data = []
+# for st in states:
+#     with open(f"./data/hosp_data/saves/hosp_{st}_{epiweek_pres}.pkl", "rb") as fl:
+#         raw_data.append(pickle.load(fl))
 
-def diff_epiweeks(epiweek1, epiweek2):
-    """
-    Compute difference in epiweeks
-    """
-    year1, week1 = int(epiweek1[:4]), int(epiweek1[4:])
-    year2, week2 = int(epiweek2[:4]), int(epiweek2[4:])
-    return (year1 - year2) * 52 + week1 - week2
+# def diff_epiweeks(epiweek1, epiweek2):
+#     """
+#     Compute difference in epiweeks
+#     """
+#     year1, week1 = int(epiweek1[:4]), int(epiweek1[4:])
+#     year2, week2 = int(epiweek2[:4]), int(epiweek2[4:])
+#     return (year1 - year2) * 52 + week1 - week2
 
-if diff_epiweeks(epiweek, epiweek_pres) > 0:
-    raw_data = np.array(raw_data)[:, :-5 + day_ahead, :]
-else:    
-    raw_data = np.array(raw_data)[:, :diff_epiweeks(epiweek, epiweek_pres) + day_ahead, :]  # states x days x featureslabel_idx = include_cols.index("cdc_hospitalized")
-if options.disease == "flu":
-    label_idx = include_cols.index("cdc_flu_hosp")
-else:
-    label_idx = include_cols.index("cdc_hospitalized")
-all_labels = raw_data[:, -1, label_idx]
-print(f"Diff epiweeks: {diff_epiweeks(epiweek, epiweek_pres)}")
-raw_data = raw_data[:, start_day:-day_ahead, :]
+# if diff_epiweeks(epiweek, epiweek_pres) > 0:
+#     raw_data = np.array(raw_data)[:, :-5 + day_ahead, :]
+# else:    
+#     raw_data = np.array(raw_data)[:, :diff_epiweeks(epiweek, epiweek_pres) + day_ahead, :]  # states x days x featureslabel_idx = include_cols.index("cdc_hospitalized")
+# if options.disease == "flu":
+#     label_idx = include_cols.index("cdc_flu_hosp")
+# else:
+#     label_idx = include_cols.index("cdc_hospitalized")
+# all_labels = raw_data[:, -1, label_idx]
+# print(f"Diff epiweeks: {diff_epiweeks(epiweek, epiweek_pres)}")
+# raw_data = raw_data[:, start_day:-day_ahead, :]
 
-raw_data_unnorm = raw_data.copy()
+# raw_data_unnorm = raw_data.copy()
 
 if options.tb:
     if options.sliding_window:
         if options.preprocess:
-            writer = SummaryWriter("runs/"+disease+"/"+disease+"_preprocessedslidingwindow_epiweek"+str(epiweek_pres)+"_weekahead_"+str(options.day_ahead)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
+            writer = SummaryWriter("runs/"+disease+"/"+disease+"_preprocessedslidingwindow_weekahead_"+str(options.day_ahead)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
         else:
-            writer = SummaryWriter("runs/"+disease+"/"+disease+"_slidingwindow_epiweek"+str(epiweek_pres)+"_weekahead_"+str(options.day_ahead)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
+            writer = SummaryWriter("runs/"+disease+"/"+disease+"_slidingwindow_weekahead_"+str(options.day_ahead)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
     else:
-        writer = SummaryWriter("runs/"+disease+"/"+disease+"_normal_epiweek"+str(epiweek_pres)+"_weekahead_"+str(options.day_ahead))
-
+        writer = SummaryWriter("runs/"+disease+"/"+disease+"_normal_weekahead_"+str(options.day_ahead))
+label_idx = 0
 class ScalerFeat:
     def __init__(self, raw_data):
         self.means = np.mean(raw_data, axis=1)
@@ -203,52 +203,50 @@ class ScalerFeat:
         return data * self.vars[:, idx] + self.means[:, idx]
 
 
-scaler = ScalerFeat(raw_data)
-raw_data = scaler.transform(raw_data)
 
 
 # Chunk dataset sequences
 
 
-def prefix_sequences(seq, day_ahead=day_ahead):
-    """
-    Prefix sequences with zeros
-    """
-    l = len(seq)
-    X, Y = np.zeros((l - day_ahead, l, seq.shape[-1])), np.zeros(l - day_ahead)
-    for i in range(l - day_ahead):
-        X[i, (l - i - 1) :, :] = seq[: i + 1, :]
-        Y[i] = seq[i + day_ahead, label_idx]
-    return X, Y
+# def prefix_sequences(seq, day_ahead=day_ahead):
+#     """
+#     Prefix sequences with zeros
+#     """
+#     l = len(seq)
+#     X, Y = np.zeros((l - day_ahead, l, seq.shape[-1])), np.zeros(l - day_ahead)
+#     for i in range(l - day_ahead):
+#         X[i, (l - i - 1) :, :] = seq[: i + 1, :]
+#         Y[i] = seq[i + day_ahead, label_idx]
+#     return X, Y
 
 
-X, Y = [], []
-for i, st in enumerate(states):
-    x, y = prefix_sequences(raw_data[i])
-    X.append(x)
-    Y.append(y)
-X_train, Y_train = np.concatenate(X), np.concatenate(Y)
-num_repeat = int(X_train.shape[0]/len(states))
-states_train_unflattened = [list(itertools.repeat(st, num_repeat)) for st in states]
-states_train = []
-for st_here in states_train_unflattened:
-    states_train.extend(st_here)
+# X, Y = [], []
+# for i, st in enumerate(states):
+#     x, y = prefix_sequences(raw_data[i])
+#     X.append(x)
+#     Y.append(y)
+# X_train, Y_train = np.concatenate(X), np.concatenate(Y)
+# num_repeat = int(X_train.shape[0]/len(states))
+# states_train_unflattened = [list(itertools.repeat(st, num_repeat)) for st in states]
+# states_train = []
+# for st_here in states_train_unflattened:
+#     states_train.extend(st_here)
 
-# Shuffle data
-perm = np.random.permutation(len(X_train))
-X_train, Y_train = X_train[perm], Y_train[perm]
+# # Shuffle data
+# perm = np.random.permutation(len(X_train))
+# X_train, Y_train = X_train[perm], Y_train[perm]
 
-# Reference sequences
-X_ref = raw_data[:, :, label_idx]
+# # Reference sequences
+# X_ref = raw_data[:, :, label_idx]
 
-# Divide val and train
-frac = 0.1
-X_val, Y_val, states_val = X_train[: int(len(X_train) * frac)], Y_train[: int(len(X_train) * frac)], states_train[: int(len(X_train) * frac)]
-X_train, Y_train, states_train = (
-    X_train[int(len(X_train) * frac) :],
-    Y_train[int(len(X_train) * frac) :],
-    states_train[int(len(X_train) * frac) :],
-)
+# # Divide val and train
+# frac = 0.1
+# X_val, Y_val, states_val = X_train[: int(len(X_train) * frac)], Y_train[: int(len(X_train) * frac)], states_train[: int(len(X_train) * frac)]
+# X_train, Y_train, states_train = (
+#     X_train[int(len(X_train) * frac) :],
+#     Y_train[int(len(X_train) * frac) :],
+#     states_train[int(len(X_train) * frac) :],
+# )
 
 def batched_compute_pcc(x, y):
     """ R computation
@@ -269,6 +267,117 @@ def batched_compute_pcc(x, y):
     # var_y = sum([(b - mean_y) ** 2 for b in y])
     return (cov / (torch.sqrt(var_x)+1e-6)) / (torch.sqrt(var_y)+1e-6)
 
+
+with open("./data/household_power_consumption/household_power_consumption.txt", "r") as f:
+    data = f.readlines()
+
+data = [d.strip().split(";") for d in data][1:]
+
+def get_month(ss: str):
+    i = ss.find("/")
+    return int(ss[i+1:ss[i+1:].find("/")+i + 1]) - 1
+def get_time_of_day(ss: str):
+    hour = int(ss[:2])
+    if hour < 6:
+        return 0
+    elif hour < 12:
+        return 1
+    elif hour < 18:
+        return 2
+    else:
+        return 3
+
+tod = np.array([get_time_of_day(d[1]) for d in data], dtype=np.int32)
+month = np.array([get_month(d[0]) for d in data], dtype=np.int32)
+features = []
+for d in data:
+    f = []
+    for x in d[2:]:
+        try:
+            f.append(float(x))
+        except:
+            f.append(0.0)
+    features.append(f)
+features = np.array(features)
+features = np.expand_dims(features, axis=0)
+# pu.db
+scaler = ScalerFeat(features)
+features = scaler.transform(features)
+features = np.squeeze(features, axis=0)
+target = features[:, 0]
+
+total_time = len(data)
+test_start = int(total_time * 0.7)
+test_end = int(total_time * 0.9)
+
+X, X_symp, Y, mt, reg = [], [], [], [], []
+
+def sample_train(n_samples, window = 20):
+    X, X_symp, Y, mt, reg = [], [], [], [], []
+    start_seqs = np.random.randint(0, test_start, n_samples)
+    for start_seq in start_seqs:
+        X.append(target[start_seq:start_seq+window, np.newaxis])
+        X_symp.append(features[start_seq:start_seq+window])
+        Y.append(target[start_seq+window+(options.day_ahead - 1)])
+        mt.append(month[start_seq+window])
+        reg.append(tod[start_seq+window])
+    X = np.array(X)
+    X_symp = np.array(X_symp)
+    Y = np.array(Y)
+    mt = np.array(mt)
+    reg = np.array(reg)
+    return X, X_symp, Y, mt, reg
+
+def sample_val(n_samples, window = 20):
+    X, X_symp, Y, mt, reg = [], [], [], [], []
+    start_seqs = np.random.randint(test_start, test_end-(window - (options.day_ahead -1)), n_samples)
+    for start_seq in start_seqs:
+        X.append(target[start_seq:start_seq+window, np.newaxis])
+        X_symp.append(features[start_seq:start_seq+window])
+        Y.append(target[start_seq+window+(options.day_ahead - 1)])
+        mt.append(month[start_seq+window])
+        reg.append(tod[start_seq+window])
+    X = np.array(X)
+    X_symp = np.array(X_symp)
+    Y = np.array(Y)
+    mt = np.array(mt)
+    reg = np.array(reg)
+    return X, X_symp, Y, mt, reg
+
+def sample_test(n_samples, window = 20):
+    X, X_symp, Y, mt, reg = [], [], [], [], []
+    start_seqs = np.random.randint(test_end, total_time-(window - (options.day_ahead -1)), n_samples)
+    for start_seq in start_seqs:
+        X.append(target[start_seq:start_seq+window, np.newaxis])
+        X_symp.append(features[start_seq:start_seq+window])
+        Y.append(target[start_seq+window+(options.day_ahead - 1)])
+        mt.append(month[start_seq+window])
+        reg.append(tod[start_seq+window])
+    X = np.array(X)
+    X_symp = np.array(X_symp)
+    Y = np.array(Y)
+    mt = np.array(mt)
+    reg = np.array(reg)
+    return X, X_symp, Y, mt, reg
+# pu.db
+
+# Reference points
+# len_seq = test_start//splits
+X_ref = features
+# X_ref = features[np.newaxis,:,0]
+# seq_references = np.array([features[i: i+len_seq, 0, np.newaxis] for i in range(0, test_start, len_seq)])[:, :options.batch_size, :]
+# symp_references = np.array([features[i: i+len_seq] for i in range(0, test_start, len_seq)])[:, :options.batch_size, :]
+# month_references = np.arange(12)
+# reg_references = np.arange(4)
+# splits = 4
+train_seqs, X_train, Y_train, mt, reg = sample_train(options.batch_size)
+val_seqs, X_val, Y_val, mt_val, reg_val = sample_val(options.batch_size)
+test_seqs, X_test, Y_test, mt_test, reg_test = sample_test(options.batch_size)
+# pu.db
+
+
+
+X_ref = np.expand_dims(X_ref, axis=0)
 if options.sliding_window:
     ilk = options.window_size
     # """
@@ -287,14 +396,14 @@ if options.sliding_window:
         pccs = batched_compute_pcc(torch.tensor(all_idxs[:,:X_ref.shape[1]]), torch.tensor(all_idxs[:,X_ref.shape[1]:]))
         pccs = pccs.numpy().reshape((X_ref.shape[0], X_train.shape[0]))
         summed_pccs = np.sum(pccs, axis=-1)
-        best_ref_idxs = np.argsort(summed_pccs)[:X_ref_orig_shape[0]]
+        best_ref_idxs = np.argsort(summed_pccs)[:1000]
         X_ref = X_ref[best_ref_idxs, :]
         # pu.db
 
 
 # Build model
-feat_enc = GRUEncoder(in_size=len(include_cols), out_dim=60,).to(device)
-seq_enc = GRUEncoder(in_size=1, out_dim=60,).to(device)
+feat_enc = GRUEncoder(in_size=7, out_dim=60,).to(device)
+seq_enc = GRUEncoder(in_size=7, out_dim=60,).to(device)
 fnp_enc = RegressionFNP2(
     dim_x=60,
     dim_y=1,
@@ -371,7 +480,7 @@ class SeqDataWithStates(torch.utils.data.Dataset):
 
 train_dataset = SeqData(X_train, Y_train)
 val_dataset = SeqData(X_val, Y_val)
-val_dataset_with_states = SeqDataWithStates(X_val, Y_val, states_val)
+val_dataset_with_states = SeqData(X_val, Y_val)
 train_loader = torch.utils.data.DataLoader(
     train_dataset, batch_size=batch_size, shuffle=True
 )
@@ -382,7 +491,7 @@ val_loader_with_states = torch.utils.data.DataLoader(
     val_dataset_with_states, batch_size=batch_size, shuffle=True
 )
 if start_model != "None":
-    load_model("./"+disease+"hosp_models", file=start_model)
+    load_model("./"+disease+"power_models", file=start_model)
     print("Loaded model from", start_model)
 
 opt = torch.optim.Adam(
@@ -406,7 +515,7 @@ def train_step(data_loader, X, Y, X_ref):
     T_target = []
     for i, (x, y) in enumerate(data_loader):
         opt.zero_grad()
-        x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
+        x_seq = seq_enc(float_tensor(X_ref))
         x_feat = feat_enc(x)
         loss, yp, _ = fnp_enc(x_seq, float_tensor(X_ref), x_feat, y)
         yp = yp[X_ref.shape[0] :]
@@ -435,8 +544,9 @@ def val_step(data_loader, X, Y, X_ref, sample=True):
         val_err = 0.0
         YP = []
         T_target = []
+        all_vars = []
         for i, (x, y) in enumerate(data_loader):
-            x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
+            x_seq = seq_enc(float_tensor(X_ref))
             x_feat = feat_enc(x)
             yp, _, vars, _, _, _, _ = fnp_enc.predict(
                 x_feat, x_seq, float_tensor(X_ref), sample
@@ -444,36 +554,40 @@ def val_step(data_loader, X, Y, X_ref, sample=True):
             val_err += torch.pow(yp - y, 2).mean().sqrt().detach().cpu().numpy()
             YP.append(yp.detach().cpu().numpy())
             T_target.append(y.detach().cpu().numpy())
-        return val_err / (i + 1), np.array(YP).ravel(), np.array(T_target).ravel()
-
-def val_step_with_states(data_loader, X, Y, X_ref, sample=True):
-    """
-    Validation step
-    """
-    with torch.set_grad_enabled(False):
-        feat_enc.eval()
-        seq_enc.eval()
-        fnp_enc.eval()
-        val_err = 0.0
-        YP = []
-        T_target = []
-        states_here = []
-        all_vars = []
-        for i, (x, y, st) in enumerate(data_loader):
-            x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
-            x_feat = feat_enc(x)
-            yp, _, vars, _, _, _, _ = fnp_enc.predict(
-                x_feat, x_seq, float_tensor(X_ref), sample
-            )
-            val_err += torch.pow(yp - y, 2).mean().sqrt().detach().cpu().numpy()
-            YP.extend(yp.detach().cpu().numpy().tolist())
-            T_target.extend(y.detach().cpu().numpy().tolist())
             all_vars.extend(vars.detach().cpu().numpy().tolist())
-            states_here.extend(st)
         YP = [x[0] for x in YP]
         T_target = [x[0] for x in T_target]
         all_vars = [x[0] for x in all_vars]
-        return val_err / (i + 1), np.array(YP, dtype=object).ravel(), np.array(T_target).ravel(), states_here, all_vars
+        return val_err / (i + 1), np.array(YP, dtype=object).ravel(), np.array(T_target).ravel(), all_vars
+
+# def val_step_with_states(data_loader, X, Y, X_ref, sample=True):
+#     """
+#     Validation step
+#     """
+#     with torch.set_grad_enabled(False):
+#         feat_enc.eval()
+#         seq_enc.eval()
+#         fnp_enc.eval()
+#         val_err = 0.0
+#         YP = []
+#         T_target = []
+#         states_here = []
+#         all_vars = []
+#         for i, (x, y, st) in enumerate(data_loader):
+#             x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
+#             x_feat = feat_enc(x)
+#             yp, _, vars, _, _, _, _ = fnp_enc.predict(
+#                 x_feat, x_seq, float_tensor(X_ref), sample
+#             )
+#             val_err += torch.pow(yp - y, 2).mean().sqrt().detach().cpu().numpy()
+#             YP.extend(yp.detach().cpu().numpy().tolist())
+#             T_target.extend(y.detach().cpu().numpy().tolist())
+#             all_vars.extend(vars.detach().cpu().numpy().tolist())
+#             states_here.extend(st)
+#         YP = [x[0] for x in YP]
+#         T_target = [x[0] for x in T_target]
+#         all_vars = [x[0] for x in all_vars]
+#         return val_err / (i + 1), np.array(YP, dtype=object).ravel(), np.array(T_target).ravel(), states_here, all_vars
 
 
 def test_step(X, X_ref, samples=1000):
@@ -487,7 +601,7 @@ def test_step(X, X_ref, samples=1000):
         YP = []
         As = []
         for i in tqdm(range(samples)):
-            x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
+            x_seq = seq_enc(float_tensor(X_ref))
             x_feat = feat_enc(float_tensor(X))
             yp, _, vars, _, _, _, A = fnp_enc.predict(
                 x_feat, x_seq, float_tensor(X_ref), sample=False
@@ -502,11 +616,12 @@ min_val_epoch = 0
 all_results = {}
 for ep in range(epochs):
     print(f"Epoch {ep+1}")
+    print("num refs: "+str(X_ref.shape[0]))
     train_loss, train_err, yp, yt = train_step(train_loader, X_train, Y_train, X_ref)
     print(f"Train loss: {train_loss:.4f}, Train err: {train_err:.4f}")
-    val_err, yp, yt, st, vars = val_step_with_states(val_loader_with_states, X_val, Y_val, X_ref)
+    val_err, yp, yt, vars = val_step(val_loader_with_states, X_val, Y_val, X_ref)
     print(f"Val err: {val_err:.4f}")
-    all_results[ep] = {"pred": yp, "gt": yt, "states": st, "vars": vars}
+    all_results[ep] = {"pred": yp, "gt": yt, "vars": vars}
     if options.tb:
         writer.add_scalar('Train/RMSE', train_err, ep)
         writer.add_scalar('Train/loss', train_loss, ep)
@@ -514,7 +629,7 @@ for ep in range(epochs):
     if val_err < min_val_err:
         min_val_err = val_err
         min_val_epoch = ep
-        save_model("/nvmescratch/ssinha97/"+disease+"hosp_models")
+        save_model("/nvmescratch/ssinha97/"+disease+"power_models")
         print("Saved model")
     print()
     print()
@@ -531,18 +646,19 @@ else:
         pickle.dump(all_results, f)
 
 # Now we get results
-load_model("/nvmescratch/ssinha97/"+disease+"hosp_models")
-X_test = raw_data
+load_model("/nvmescratch/ssinha97/"+disease+"power_models")
 Y_test, As = test_step(X_test, X_ref, samples=2000)
 Y_test = Y_test.squeeze()
 
 Y_test_unnorm = scaler.inverse_transform_idx(Y_test, label_idx)
+X_test_unnorm = scaler.inverse_transform_idx(X_test, label_idx)
+
 # Save predictions
 if options.sliding_window:
-    os.makedirs(f"./"+disease+"_hosp_stable_predictions_slidingwindow", exist_ok=True)
-    with open(f"./"+disease+"_hosp_stable_predictions_slidingwindow/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
-        pickle.dump([Y_test_unnorm, all_labels, raw_data_unnorm[:,:,label_idx], As], f)
+    os.makedirs(f"./"+disease+"_power_stable_predictions_slidingwindow", exist_ok=True)
+    with open(f"./"+disease+"_power_stable_predictions_slidingwindow/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
+        pickle.dump([Y_test_unnorm, X_test_unnorm[:, label_idx], As], f)
 else:
-    os.makedirs(f"./"+disease+"_hosp_stable_predictions", exist_ok=True)
-    with open(f"./"+disease+"_hosp_stable_predictions/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
-        pickle.dump([Y_test_unnorm, all_labels, raw_data_unnorm[:,:,label_idx], As], f)
+    os.makedirs(f"./"+disease+"_power_stable_predictions", exist_ok=True)
+    with open(f"./"+disease+"_power_stable_predictions/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
+        pickle.dump([Y_test_unnorm, X_test_unnorm[:, label_idx], As], f)

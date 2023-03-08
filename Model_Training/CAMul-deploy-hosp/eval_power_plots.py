@@ -13,7 +13,6 @@ import matplotlib.pyplot as plt
 import sys
 
 parser = OptionParser()
-parser.add_option("-e", "--epiweek", dest="epiweek", default="202252", type="string")
 parser.add_option("-m", "--model_type", dest="model_type", default="normal", type="string") # normal, cnn, slidingwindow, preprocess, slidingwindow_cnn, rag, slidingwindow_rag
 parser.add_option("--size", dest="window_size", default=10, type="int")
 parser.add_option("--stride", dest="window_stride", default=10, type="int")
@@ -22,27 +21,28 @@ parser.add_option("--stride", dest="window_stride", default=10, type="int")
 # parser.add_option("-s", "--state", dest="state", default="AR", type="string")
 (options, args) = parser.parse_args()
 
-if options.model_type == "normal":
-    file_initials = "flu_hosp_stable_predictions/normal_disease_flu_epiweek_202252_weekahead_"
-    writer = SummaryWriter("runs/flu/flu_normal_epiweek"+str(options.epiweek))
-elif "slidingwindow" in options.model_type and "cnn" in options.model_type:
-        file_initials = "flu_cnn_hosp_stable_predictions_slidingwindow/cnn_slidingwindow_disease_flu_epiweek_202252_weekahead_"
-        writer = SummaryWriter("runs/flu/flu_cnn_slidingwindowpreprocessed_epiweek"+str(options.epiweek)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
+# if options.model_type == "normal":
+#     file_initials = "power_power_stable_predictions/normal_disease_flu_epiweek_202252_weekahead_"
+#     writer = SummaryWriter("runs/flu/flu_normal_epiweek"+str(options.epiweek))
+if "slidingwindow" in options.model_type and "cnn" in options.model_type:
+        file_initials = "power_cnn_power_stable_predictions_slidingwindow/cnn_slidingwindow_disease_power_weekahead_"
+        # writer = SummaryWriter("runs/flu/flu_cnn_slidingwindowpreprocessed_epiweek"+str(options.epiweek)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
 elif "slidingwindow" in options.model_type and "rag" in options.model_type:
-        file_initials = "flu_rag_hosp_stable_predictions_slidingwindow/rag_slidingwindow_disease_flu_epiweek_202252_weekahead_"
-        writer = SummaryWriter("runs/flu/flu_rag_slidingwindowpreprocessed_epiweek"+str(options.epiweek)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))        
+        file_initials = "power_rag_power_stable_predictions_slidingwindow/rag_slidingwindow_disease_power_weekahead_"
+        # file_initials = "flu_rag_hosp_stable_predictions_slidingwindow/rag_slidingwindow_disease_flu_epiweek_202252_weekahead_"
+        # writer = SummaryWriter("runs/flu/flu_rag_slidingwindowpreprocessed_epiweek"+str(options.epiweek)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))        
 elif "preprocess" in options.model_type:
         file_initials = "flu_hosp_stable_predictions_slidingwindow/slidingwindowpreprocessed_disease_flu_epiweek_202252_weekahead_"
-        writer = SummaryWriter("runs/flu/flu_slidingwindowpreprocessed_epiweek"+str(options.epiweek)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
-elif "cnn" in options.model_type:
-        file_initials = "flu_cnn_hosp_stable_predictions/cnn_disease_flu_epiweek_202252_weekahead_"
-        writer = SummaryWriter("runs/flu/flu_cnn_disease_flu_epiweek"+str(options.epiweek))
-elif "rag" in options.model_type:
-        file_initials = "flu_rag_hosp_stable_predictions/rag_disease_flu_epiweek_202252_weekahead_"
-        writer = SummaryWriter("runs/flu/flu_rag_disease_flu_epiweek"+str(options.epiweek))
+        # writer = SummaryWriter("runs/flu/flu_slidingwindowpreprocessed_epiweek"+str(options.epiweek)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
+# elif "cnn" in options.model_type:
+#         file_initials = "flu_cnn_hosp_stable_predictions/cnn_disease_flu_epiweek_202252_weekahead_"
+#         writer = SummaryWriter("runs/flu/flu_cnn_disease_flu_epiweek"+str(options.epiweek))
+# elif "rag" in options.model_type:
+#         file_initials = "flu_rag_hosp_stable_predictions/rag_disease_flu_epiweek_202252_weekahead_"
+#         writer = SummaryWriter("runs/flu/flu_rag_disease_flu_epiweek"+str(options.epiweek))
 else:
-        file_initials = "flu_hosp_stable_predictions_slidingwindow/slidingwindow_disease_flu_epiweek_202252_weekahead_"
-        writer = SummaryWriter("runs/flu/flu_slidingwindow_epiweek"+str(options.epiweek)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
+        file_initials = "power_power_stable_predictions_slidingwindow/slidingwindow_disease_power_weekahead_"
+        # writer = SummaryWriter("runs/flu/flu_slidingwindow_epiweek"+str(options.epiweek)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
 
 
 def get_metrics(file_name, epiweek_now, ahead):
@@ -118,60 +118,61 @@ def get_metrics(file_name, epiweek_now, ahead):
 
 
 
-states = [
-    "AL",
-    "AK",
-    "AZ",
-    "AR",
-    "CA",
-    "CO",
-    "CT",
-    "DE",
-    "DC",
-    "FL",
-    "GA",
-    "ID",
-    "IL",
-    "IN",
-    "IA",
-    "KS",
-    "KY",
-    "LA",
-    "ME",
-    "MD",
-    "MA",
-    "MI",
-    "MN",
-    "MS",
-    "MO",
-    "MT",
-    "NE",
-    "NV",
-    "NH",
-    "NJ",
-    "NM",
-    "NY",
-    "NC",
-    "ND",
-    "OH",
-    "OK",
-    "OR",
-    "PA",
-    "RI",
-    "SC",
-    "SD",
-    "TN",
-    "TX",
-    "UT",
-    "VT",
-    "VA",
-    "WA",
-    "WV",
-    "WI",
-    "WY",
-    "X",
-]
+# states = [
+#     "AL",
+#     "AK",
+#     "AZ",
+#     "AR",
+#     "CA",
+#     "CO",
+#     "CT",
+#     "DE",
+#     "DC",
+#     "FL",
+#     "GA",
+#     "ID",
+#     "IL",
+#     "IN",
+#     "IA",
+#     "KS",
+#     "KY",
+#     "LA",
+#     "ME",
+#     "MD",
+#     "MA",
+#     "MI",
+#     "MN",
+#     "MS",
+#     "MO",
+#     "MT",
+#     "NE",
+#     "NV",
+#     "NH",
+#     "NJ",
+#     "NM",
+#     "NY",
+#     "NC",
+#     "ND",
+#     "OH",
+#     "OK",
+#     "OR",
+#     "PA",
+#     "RI",
+#     "SC",
+#     "SD",
+#     "TN",
+#     "TX",
+#     "UT",
+#     "VT",
+#     "VA",
+#     "WA",
+#     "WV",
+#     "WI",
+#     "WY",
+#     "X",
+# ]
 
+states = list(range(128))
 week_ahead = [1,2,3]
 plot_dict = {}
 heat_map_means = {}
@@ -191,6 +192,7 @@ for ah in week_ahead:
 
     for st, state in enumerate(states):
         if ah == 1:
+            pu.db
             plot_dict[state][0] = data_pickle[2][st].tolist()
             plot_dict[state][1] = [0 for x in range(len(plot_dict[state][0]))]
             plot_dict[state][2] = data_pickle[2][st].tolist()
