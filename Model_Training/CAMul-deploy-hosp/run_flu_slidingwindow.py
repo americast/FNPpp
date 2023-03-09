@@ -4,9 +4,10 @@ from tqdm import tqdm
 from optparse import OptionParser
 import sys
 parser = OptionParser()
-parser.add_option("-e", "--epiweek", dest="epiweek", default="202252", type="string")
+parser.add_option("--epiweek_start", dest="epiweek_start", default="202232", type="string")
+parser.add_option("--epiweek_end", dest="epiweek_end", default="202252", type="string")
 parser.add_option("-d", "--disease", dest="disease", default="flu", type="string")
-parser.add_option("--epochs", dest="epochs", default=1500, type="int")
+parser.add_option("--epochs", dest="epochs", default=300, type="int")
 parser.add_option("--size", dest="window_size", type="int", default=17)
 parser.add_option("--stride", dest="window_stride", type="int", default=15)
 parser.add_option("--preprocess", dest="preprocess", action="store_true", default=False)
@@ -16,10 +17,7 @@ parser.add_option("--rag", dest="rag", action="store_true", default=False)
 
 # epiweeks = list(range(202101, 202153))
 (options, args) = parser.parse_args()
-if options.epiweek is None:
-    epiweeks = list(range(202101, 202153,4))
-else:
-    epiweeks = [options.epiweek]
+epiweeks = list(range(int(options.epiweek_start), int(options.epiweek_end)))
 # pu.db
 
 if options.cnn and options.rag:
@@ -80,22 +78,22 @@ states = [
     "X",
 ]
 
-if options.epiweek is not None and int(options.epiweek)> 202153:
-    subprocess.run(
-            [
-                "bash",
-                "./scripts/hosp_preprocess.sh",
-                options.epiweek,
-            ]
-        )
-else:
-    subprocess.run(
-            [
-                "bash",
-                "./scripts/hosp_preprocess.sh",
-                str("202240"),
-            ]
-        )
+# if options.epiweek is not None and int(options.epiweek)> 202153:
+subprocess.run(
+        [
+            "bash",
+            "./scripts/hosp_preprocess.sh",
+            options.epiweek_end,
+        ]
+    )
+# else:
+#     subprocess.run(
+#             [
+#                 "bash",
+#                 "./scripts/hosp_preprocess.sh",
+#                 str("202240"),
+#             ]
+#         )
 
 # sample_out = [True, False]
 sample_out = [True]
@@ -103,7 +101,7 @@ sample_out = [True]
 lr = [0.001]
 # patience = [1000, 3000]
 patience = [500]
-ahead = [2,3]
+ahead = [1,2,3]
 # ahead = [4]
 
 

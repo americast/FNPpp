@@ -24,8 +24,8 @@ from tqdm import tqdm
 from itertools import product
 
 parser = OptionParser()
-parser.add_option("-p", "--epiweek_pres", dest="epiweek_pres", default="202240", type="string")
-parser.add_option("-e", "--epiweek", dest="epiweek", default="202140", type="string")
+parser.add_option("-p", "--epiweek_pres", dest="epiweek_pres", default="202252", type="string")
+parser.add_option("-e", "--epiweek", dest="epiweek", default="202232", type="string")
 parser.add_option("--epochs", dest="epochs", default=3500, type="int")
 parser.add_option("--lr", dest="lr", default=1e-3, type="float")
 parser.add_option("--patience", dest="patience", default=1000, type="int")
@@ -59,6 +59,9 @@ lr = options.lr
 epochs = options.epochs
 patience = options.patience
 disease = options.disease
+
+epiweek_start = "202140"
+
 if options.rag and options.cnn:
     print("Cannot have cnn and rag together")
     sys.exit(0)
@@ -145,11 +148,15 @@ states = [
     "X",
 ]
 
+states_to_consider = [
+    "DC", "MA", "FL", "GA", "IL", "NY", "NJ", "PA", "TX", "WA", "CA", "X"
+]
+
+states_to_consider_indices = [states.index(x) for x in states_to_consider]
 raw_data = []
 for st in states:
     with open(f"./data/hosp_data/saves/hosp_{st}_{epiweek_pres}.pkl", "rb") as fl:
         raw_data.append(pickle.load(fl))
-
 def diff_epiweeks(epiweek1, epiweek2):
     """
     Compute difference in epiweeks
@@ -173,13 +180,13 @@ raw_data = raw_data[:, start_day:-day_ahead, :]
 raw_data_unnorm = raw_data.copy()
 
 if options.tb:
-    if options.sliding_window:
-        if options.preprocess:
-            writer = SummaryWriter("runs/"+disease+"/"+disease+"_preprocessedslidingwindow_epiweek"+str(epiweek_pres)+"_weekahead_"+str(options.day_ahead)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
-        else:
-            writer = SummaryWriter("runs/"+disease+"/"+disease+"_slidingwindow_epiweek"+str(epiweek_pres)+"_weekahead_"+str(options.day_ahead)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
-    else:
-        writer = SummaryWriter("runs/"+disease+"/"+disease+"_normal_epiweek"+str(epiweek_pres)+"_weekahead_"+str(options.day_ahead))
+    writer = SummaryWriter("runs/"+disease+"/"+options.save_model)
+    # if options.sliding_window:
+    #     if options.preprocess:
+    #     else:
+    #         writer = SummaryWriter("runs/"+disease+"/"+disease+"_slidingwindow_epiweek"+str(epiweek_pres)+"_weekahead_"+str(options.day_ahead)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
+    # else:
+    #     writer = SummaryWriter("runs/"+disease+"/"+disease+"_normal_epiweek"+str(epiweek_pres)+"_weekahead_"+str(options.day_ahead))
 
 class ScalerFeat:
     def __init__(self, raw_data):
@@ -201,6 +208,9 @@ class ScalerFeat:
 
     def inverse_transform_idx(self, data, idx=label_idx):
         return data * self.vars[:, idx] + self.means[:, idx]
+    
+    def inverse_transform_idx_selected_states(self, data, idx=label_idx, state_indices=states_to_consider_indices):
+        return data * self.vars[:, idx][states_to_consider_indices] + self.means[:, idx][states_to_consider_indices]
 
 
 scaler = ScalerFeat(raw_data)
@@ -215,7 +225,10 @@ def prefix_sequences(seq, day_ahead=day_ahead):
     Prefix sequences with zeros
     """
     l = len(seq)
+    # try:
     X, Y = np.zeros((l - day_ahead, l, seq.shape[-1])), np.zeros(l - day_ahead)
+    # except:
+    #     pu.db
     for i in range(l - day_ahead):
         X[i, (l - i - 1) :, :] = seq[: i + 1, :]
         Y[i] = seq[i + day_ahead, label_idx]
@@ -224,12 +237,13 @@ def prefix_sequences(seq, day_ahead=day_ahead):
 
 X, Y = [], []
 for i, st in enumerate(states):
-    x, y = prefix_sequences(raw_data[i])
-    X.append(x)
-    Y.append(y)
+    if st in states_to_consider:
+        x, y = prefix_sequences(raw_data[i])
+        X.append(x)
+        Y.append(y)
 X_train, Y_train = np.concatenate(X), np.concatenate(Y)
 num_repeat = int(X_train.shape[0]/len(states))
-states_train_unflattened = [list(itertools.repeat(st, num_repeat)) for st in states]
+states_train_unflattened = [list(itertools.repeat(st, num_repeat)) for st in states_to_consider]
 states_train = []
 for st_here in states_train_unflattened:
     states_train.extend(st_here)
@@ -502,6 +516,10 @@ min_val_epoch = 0
 all_results = {}
 for ep in range(epochs):
     print(f"Epoch {ep+1}")
+    print("---------------Details-----------------")
+    print("Epiweek: "+str(options.epiweek))
+    print("Week ahead: "+str(options.day_ahead))
+    print("---------------------------------------")
     train_loss, train_err, yp, yt = train_step(train_loader, X_train, Y_train, X_ref)
     print(f"Train loss: {train_loss:.4f}, Train err: {train_err:.4f}")
     val_err, yp, yt, st, vars = val_step_with_states(val_loader_with_states, X_val, Y_val, X_ref)
@@ -514,7 +532,10 @@ for ep in range(epochs):
     if val_err < min_val_err:
         min_val_err = val_err
         min_val_epoch = ep
-        save_model("/nvmescratch/ssinha97/"+disease+"hosp_models")
+        try:
+            save_model("/nvmescratch/ssinha97/fnp_saved_models/"+disease+"hosp_models")
+        except:
+            save_model("/localscratch/ssinha97/fnp_saved_models/"+disease+"hosp_models")
         print("Saved model")
     print()
     print()
@@ -531,18 +552,21 @@ else:
         pickle.dump(all_results, f)
 
 # Now we get results
-load_model("/nvmescratch/ssinha97/"+disease+"hosp_models")
-X_test = raw_data
+try:
+    load_model("/nvmescratch/ssinha97/fnp_saved_models/"+disease+"hosp_models")
+except:
+    load_model("/localscratch/ssinha97/fnp_saved_models/"+disease+"hosp_models")
+X_test = raw_data[states_to_consider_indices]
 Y_test, As = test_step(X_test, X_ref, samples=2000)
 Y_test = Y_test.squeeze()
 
-Y_test_unnorm = scaler.inverse_transform_idx(Y_test, label_idx)
+Y_test_unnorm = scaler.inverse_transform_idx_selected_states(Y_test, label_idx)
 # Save predictions
 if options.sliding_window:
     os.makedirs(f"./"+disease+"_hosp_stable_predictions_slidingwindow", exist_ok=True)
     with open(f"./"+disease+"_hosp_stable_predictions_slidingwindow/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
-        pickle.dump([Y_test_unnorm, all_labels, raw_data_unnorm[:,:,label_idx], As], f)
+        pickle.dump([Y_test_unnorm, all_labels[states_to_consider_indices], raw_data_unnorm[:,:,label_idx][states_to_consider_indices], As], f)
 else:
     os.makedirs(f"./"+disease+"_hosp_stable_predictions", exist_ok=True)
     with open(f"./"+disease+"_hosp_stable_predictions/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
-        pickle.dump([Y_test_unnorm, all_labels, raw_data_unnorm[:,:,label_idx], As], f)
+        pickle.dump([Y_test_unnorm, all_labels[states_to_consider_indices], raw_data_unnorm[:,:,label_idx][states_to_consider_indices], As], f)
