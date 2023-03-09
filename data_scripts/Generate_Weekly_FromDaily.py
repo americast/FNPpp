@@ -163,7 +163,7 @@ for ix, row in daily_csv.iterrows():
 
 if date.today().weekday() != 6:
     week_num = (date.today()-timedelta(2)).strftime("%U")
-    year_week_num = "2022"  + week_num
+    year_week_num = "2023"  + week_num
     print(year_week_num)
     week_end_date = (date.today() +timedelta((5-date.today().weekday()) % 7 )).strftime('%Y-%m-%d')
     week_end_date = (date.today() - timedelta(2)).strftime('%Y-%m-%d')
@@ -172,7 +172,7 @@ if date.today().weekday() != 6:
 
 else:
     week_num = (date.today()-timedelta(days=1)).strftime("%U")
-    year_week_num = "2022" + week_num
+    year_week_num = "2023" + week_num
     print(year_week_num)
     week_end_date = (date.today() -timedelta((date.today().weekday()-5) % 7 )).strftime('%Y-%m-%d')
     week_end_string = (date.today() - timedelta((date.today().weekday()-5) % 7 )).strftime('%Y%m%d')
@@ -185,7 +185,9 @@ kinsa_path = "./"
 #Both the method args will be same. This is to keep last date in the ouput file to same as epiweek
 epiweek1,epiweek_date1=get_epiweek_list('202001','202053',2020)
 epiweek2,epiweek_date2=get_epiweek_list('202101','202152',2021)
-epiweek3,epiweek_date3=get_epiweek_list('202201',year_week_num,2022)
+# epiweek3,epiweek_date3=get_epiweek_list('202201',year_week_num,2022)
+epiweek3,epiweek_date3=get_epiweek_list('202201','202252',2022)
+epiweek4,epiweek_date4=get_epiweek_list('202301',year_week_num,2023)
 
 
 

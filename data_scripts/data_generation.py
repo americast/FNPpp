@@ -941,7 +941,7 @@ def find_date_index(dates,cur_date,date_string=1):
     cmonth=int(month)
     year=int(year)
     
-    if year==20 or year==21 or year==22:
+    if year==20 or year==21 or year==22 or year==23:
         stryear='20'+str(year)
         year=int(stryear)
     
@@ -1538,22 +1538,31 @@ def read_covidnet(data_covidnet,week_len,start,end,step,weekly_rate,region): #re
                     else:
                         covid[43+step+mmr_week]=float(row[weekly_rate])
             elif year==2022:
-                if mmr_week<=end:
+                if mmr_week<=52:
                     if region=='Entire Network':
                         if row['NETWORK']=='COVID-NET':
                             covid[95+step+mmr_week]=float(row[weekly_rate])
                     else:
                         covid[95+step+mmr_week]=float(row[weekly_rate])
+            # start leo
+            elif year==2023:
+                if mmr_week<=end:
+                    if region=='Entire Network':
+                        if row['NETWORK']=='COVID-NET':
+                            covid[147+step+mmr_week]=float(row[weekly_rate])
+                    else:
+                        covid[147+step+mmr_week]=float(row[weekly_rate])
+            # end leo
     return covid
 
 def read_covidnet_data(inputdir,epiweek_date,state_index,dic_names_to_abbv,start_week,end_week,step,num_epiweek):
     #data_covidnet=pd.read_csv(inputdir+"COVID-NET_Processed.csv",delimiter=',')
     if date.today().weekday() != 6:
         week_num = (date.today()-timedelta(days=2)).strftime("%U")
-        year_week_num = "2022" + week_num
+        year_week_num = "2023" + week_num
     else:
         week_num = (date.today()-timedelta(days=1)).strftime("%U")
-        year_week_num = "2022" + week_num
+        year_week_num = "2023" + week_num
         
     file_name = "COVID-NET_v"+year_week_num + ".csv"
     data_covidnet=pd.read_csv(file_name,delimiter=',')
@@ -1579,7 +1588,7 @@ def read_covidnet_data(inputdir,epiweek_date,state_index,dic_names_to_abbv,start
         #print(state,state_index[st])
         covidnet_week=read_covidnet(data_covidnet,num_epiweek,start_week,end_week,step,weekly_rate,region=state)
         for week in range(0,num_epiweek):
-            start,end=map_epiweek_to_date(week+1,epiweek_date,num_epiweek,week_string=False,year=2022)
+            start,end=map_epiweek_to_date(week+1,epiweek_date,num_epiweek,week_string=False,year=2023)
             week_cases[state_index[st]][start:end+1]=[covidnet_week[week]]*(end-start+1)
     
     covidnet_dic={}
@@ -1591,13 +1600,15 @@ def read_covidnet_data(inputdir,epiweek_date,state_index,dic_names_to_abbv,start
 # In[57]:
 
 
-def get_epiweek_index(cur_date,start_week,end_week,year=2022):
+def get_epiweek_index(cur_date,start_week,end_week,year=2023):
     #print('epiweek_index',cur_date)
     week_num = date.today().strftime("%U")
-    year_week_num = "2022" + week_num
+    year_week_num = "2023" + week_num
     epiweek1,epiweek_date1=get_epiweek_list(start_week,'202053',2020)
     epiweek2,epiweek_date2=get_epiweek_list('202101','202152',2021)
-    epiweek3,epiweek_date3=get_epiweek_list('202201',year_week_num,2022)
+    # epiweek3,epiweek_date3=get_epiweek_list('202201',year_week_num,2022)
+    epiweek3,epiweek_date3=get_epiweek_list('202201','202252',2022)
+    epiweek4,epiweek_date4=get_epiweek_list('202301',year_week_num,2023)
     #epiweek=epiweek1+epiweek2
     #epiweek_date=epiweek_date1+epiweek_date2
     for d in range(0,len(epiweek_date1)):
@@ -1610,10 +1621,15 @@ def get_epiweek_index(cur_date,start_week,end_week,year=2022):
     for d in range(0, len(epiweek_date3)):
         if cur_date==epiweek_date3[d]:
             return int(epiweek3[d][4:])+105
-    
+
+    # start leo
+    for d in range(0, len(epiweek_date4)):
+        if cur_date==epiweek_date4[d]:
+            return int(epiweek4[d][4:])+157
+    # end leo
     return -1
             
-def map_epiweek_to_date(week,epiweek_date,num_epiweek,week_string=True,year=2022):
+def map_epiweek_to_date(week,epiweek_date,num_epiweek,week_string=True,year=2023):
     if week_string:
         stryear=int(week[:4])
         week=int(week[4:])
@@ -1622,17 +1638,19 @@ def map_epiweek_to_date(week,epiweek_date,num_epiweek,week_string=True,year=2022
     if year==2020:
         end_week=str(year)+str(num_epiweek)
     else:
-        pos=num_epiweek%106+1
+        pos=num_epiweek%158+1
         end_week=str(year)+str(pos)
     #start_week=str(year)+'01'
     start_week='202001'
     epiweek1, week_dates1=get_epiweek_list('202001','202053',2020)
     epiweek2,week_dates2=[],[]
     epiweek2, week_dates2=get_epiweek_list('202101','202152',2021)
-    epiweek3, week_dates3=get_epiweek_list('202201', end_week, year)
+    # epiweek3, week_dates3=get_epiweek_list('202201', end_week, year)
+    epiweek3,week_dates3=get_epiweek_list('202201','202252',2022)
+    epiweek4,week_dates4=get_epiweek_list('202301',end_week,2023)
     
-    epiweek=epiweek1+epiweek2+epiweek3
-    week_dates=week_dates1+week_dates2+week_dates3
+    epiweek=epiweek1+epiweek2+epiweek3+epiweek4
+    week_dates=week_dates1+week_dates2+week_dates3+week_dates4
     if week-2<0:
         #week_date_start_str=str(year)+'-01-01' #2020-01-01, 2021-01-01
         week_date_start_str='2020-01-01' #2020-01-01, 2021-01-01
@@ -1761,7 +1779,7 @@ def read_excess_death(inputdir,epiweek_date,state_index,dic_names_to_abbv,start_
         if name in state_names and cy>=this_year:# and cm<=this_month:
             cur_date=y+'-'+m+'-'+d
             week=get_epiweek_index(cur_date,start_week,end_week)
-            start,end=map_epiweek_to_date(week,epiweek_date,num_epiweek,week_string=False,year=2022)
+            start,end=map_epiweek_to_date(week,epiweek_date,num_epiweek,week_string=False,year=2023)
             state_id=state_index[dic_names_to_abbv[name]]
             #print(week,start,end)
             for c in cols_death:
@@ -2044,7 +2062,7 @@ def find_week_index(week,cur_date,date_string=True,strsplit='-'):
     cmonth=int(month)
     year=int(year)
     
-    if year==20 or year==21 or year == 22:
+    if year==20 or year==21 or year==22 or year==23:
         stryear='20'+str(year)
         year=int(stryear)
         
