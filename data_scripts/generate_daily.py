@@ -11,7 +11,7 @@ kinsa_path= "./"
 
 if date.today().weekday() != 6:
     week_num = (date.today()-timedelta(2)).strftime("%U")
-    year_week_num = "2022"  + week_num
+    year_week_num = "2023"  + week_num
     print(year_week_num)
     week_end_date = (date.today() +timedelta((5-date.today().weekday()) % 7 )).strftime('%Y-%m-%d')
     week_end_date = (date.today() - timedelta(2)).strftime('%Y-%m-%d')
@@ -19,7 +19,7 @@ if date.today().weekday() != 6:
     week_end_string = (date.today() - timedelta(2)).strftime('%Y%m%d')
 else:
     week_num = (date.today()-timedelta(days=1)).strftime("%U")
-    year_week_num = "2022" + week_num
+    year_week_num = "2023" + week_num
     print(year_week_num)
     week_end_date = (date.today() -timedelta((date.today().weekday()-5) % 7 )).strftime('%Y-%m-%d')
     week_end_string = (date.today() - timedelta((date.today().weekday()-5) % 7 )).strftime('%Y%m%d')
@@ -28,14 +28,16 @@ epiweek_date_obj=pd.date_range(start='2020-01-01', end=week_end_date) #update da
 epiweek_date=[date_obj.strftime('%Y-%m-%d') for date_obj in epiweek_date_obj]
 week_save=[date_obj.strftime('%Y-%m-%d') for date_obj in epiweek_date_obj]
 
-num_epiweek=105+int(week_num) #total epiweeks for 2022: 53+52+current_epiweek#update total num of epiweeks
+num_epiweek=105+52+int(week_num) #total epiweeks for 2022: 53+52+current_epiweek#update total num of epiweeks
 
 epiweek_list1,epiweek_date_list1=get_epiweek_list('202001','202053',2020) #update end epiweek as current epiweek
 epiweek_list2,epiweek_date_list2=get_epiweek_list('202101','202152',2021) #update end epiweek as current epiweek
-epiweek_list3,epiweek_date_list3=get_epiweek_list('202201',year_week_num,2022)
+# epiweek_list3,epiweek_date_list3=get_epiweek_list('202201',year_week_num,2022)
+epiweek_list3,epiweek_date_list3=get_epiweek_list('202201','202252',2022)
+epiweek_list4,epiweek_date_list4=get_epiweek_list('202301',year_week_num,2023)
 
-epiweek_list=epiweek_list1+epiweek_list2+epiweek_list3
-epiweek_date_list=epiweek_date_list1+epiweek_date_list2+epiweek_date_list3
+epiweek_list=epiweek_list1+epiweek_list2+epiweek_list3+epiweek_list4
+epiweek_date_list=epiweek_date_list1+epiweek_date_list2+epiweek_date_list3+epiweek_date_list4
 
 epiweek=np.array([0 for i in range(len(epiweek_date))])
 #print(len(epiweek))
@@ -54,6 +56,12 @@ end_day=len(epiweek_date)-4 #usually m=ewdate-4, since current data does not hav
 print(epiweek_date[end_day])
 mobility_state,cols_m,state_index,dic_names_to_abbv=read_mobility(data_path,epiweek_date,end_day)
 dic_names_to_abbv['United States']='X'
+
+print(dic_names_to_abbv)
+print(state_index)
+print('google symptoms')
+symptom, cols_symptom = read_google_symptoms(data_path,epiweek_date,state_index,dic_names_to_abbv)
+print(cols_symptom)
 
 
 print('JHU-cases')
@@ -105,7 +113,7 @@ print('covidnet')
 step=9 #if epiweek starts from 10 then step=0, if epiweek starts from 1 step=9 (10-epiweek_start)
 start_week_n=10
 end_week_n=int(week_num) #change to current epiweek (1,...) since next week
-num_epiweek=105+int(week_num) #total epiweeks
+num_epiweek=105+52+int(week_num) #total epiweeks
 data_covidnet,cols_net= read_covidnet_data(data_path,epiweek_date,state_index,dic_names_to_abbv,start_week_n,end_week_n,step,num_epiweek)
 
 print('excess death')
@@ -113,7 +121,7 @@ start_week_e='202001'
 end_week_e= year_week_num #current epiweek
 this_year=2020 #NEVER change this year, keep it always 2020, as all data started from 2020
 this_month=1 #latest epiweek month in excess-death data
-num_epiweek=105+int(week_num) #total epiweeks
+num_epiweek=105+52+int(week_num) #total epiweeks
 excess_death,cols_excess=read_excess_death(data_path,epiweek_date,state_index,dic_names_to_abbv,start_week_e,end_week_e,num_epiweek,this_month,this_year)
 
 """
@@ -157,8 +165,8 @@ outputdir=data_path #"/Users/anikat/Downloads/covid-hospitalization-data/"
 outfile="covid-hospitalization-daily-all-state-merged_vEW"+ year_week_num+".csv"
 # merge and save
 merge_data_state(mobility_state,cdc_hosp,vacc,data_covidnet,excess_death,
-                 jhu_death,jhu_cases,hosp_new_res,
+                 jhu_death,jhu_cases,hosp_new_res,symptom,
                  cols_m,cols_cdc,cols_vacc,cols_net,
-                 cols_excess,cols_jhu,cols_jhu_case,cols_hosp_new_res,
+                 cols_excess,cols_jhu,cols_jhu_case,cols_hosp_new_res,cols_symptom,
                  state_fips,epiweek,week_save,state_names,outputdir,outfile)
 

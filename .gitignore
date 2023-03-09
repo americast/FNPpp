@@ -11,9 +11,9 @@ figures/
 *.pkl
 *.png
 *.csv
-figures/
+figures-covid/
 figures-flu/
-results/
+results-covid/
 results-flu/
 
 # Distribution / packaging

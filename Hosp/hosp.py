@@ -14,6 +14,7 @@ import argparse
 import json
 import itertools
 import matplotlib.pyplot as plt 
+import torch.optim as optim
 
 from sklearn.preprocessing import StandardScaler
 
@@ -134,6 +135,7 @@ class Hosp(nn.Module):
         """ Create models, one for all region """
         # Current: one encoder for each region
         # Expect: a universal encoder for every region
+        self.X_train = X_train
         self.encoder = EncoderModules(X_train.shape[2],self.device)
         self.decoder = DecoderModules(self.device)
         self.out_layer = OutputModules(device=self.device)
@@ -208,7 +210,7 @@ class Hosp(nn.Module):
         return data_loss
 
 
-    def minibatch_train(self,optims,params,verbose=True):
+    def minibatch_train(self,optims,verbose=True):
         self.epoch += 1
 
         epoch_data_loss = [] 
@@ -240,6 +242,17 @@ class Hosp(nn.Module):
             # ''' KD loss '''
             # if self.train_feat:
             # forward feature module 
+
+        minibatch = np.random.choice(np.arange(len(region_all)), 512, replace=False)
+
+        region_all = region_all[minibatch]
+        X_all = X_all[minibatch,:,:]
+        X_mask_all = X_mask_all[minibatch,:,:]
+        time_seq_all = time_seq_all[minibatch,:,:]
+
+        y_all = y_all[minibatch,:,:]
+        y_mask_all = y_mask_all[minibatch,:]
+
         states_prime, emb_prime = self.forward_feature(region_all,X_all,X_mask_all,time_seq_all)
         data_loss = self.compute_loss(states_prime,y_all,y_mask_all)
 
@@ -258,7 +271,7 @@ class Hosp(nn.Module):
 
         elapsed = time.time() - start_time
 
-        if verbose:
+        if verbose and self.epoch % 10 == 0:
             print('Epoch: %d, Data-F: %.2e, Time: %.3f'
                     %(self.epoch, epoch_data_loss.item(), elapsed))
 
@@ -309,6 +322,7 @@ class Hosp(nn.Module):
         feat_params = itertools.chain(self.encoder.parameters(),self.decoder.parameters(),\
             self.out_layer.parameters())  
         optimizer_feat = torch.optim.Adam(feat_params, lr=self.lr, amsgrad=True)
+        sch = optim.lr_scheduler.MultiStepLR(optimizer_feat, [1500,2000], gamma=0.1)
         # will search for 1% improvement at least
         self.epoch = 0
         self.train_start_flag.append(self.epoch)  # save epoch where we start this training, used in loss plot
@@ -317,7 +331,97 @@ class Hosp(nn.Module):
         print('initial validation rmse', rmse_val)
         for epoch in range(epochs):
             """ time solo """
-            self.minibatch_train(optimizer_feat,feat_params)
+            self.minibatch_train(optimizer_feat)
+            sch.step()
+
+
+    def _train_multi_traj(self, epochs, datasize=512):
+        self.train_start_flag.append(self.epoch)  # save epoch where we start this training, used in loss plot
+
+        ############## optimizers #############
+        feat_params = itertools.chain(self.encoder.parameters(),self.decoder.parameters(),\
+            self.out_layer.parameters())  
+        optimizer_feat = torch.optim.Adam(feat_params, lr=self.lr, amsgrad=True)
+        sch = optim.lr_scheduler.MultiStepLR(optimizer_feat, [1500,2000], gamma=0.1)
+        # will search for 1% improvement at least
+        self.epoch = 0
+        self.train_start_flag.append(self.epoch)  # save epoch where we start this training, used in loss plot
+
+        rmse_val = self.evaluate()
+        print('initial validation rmse', rmse_val)
+        for epoch in range(epochs):
+            """ time solo """
+            self.multi_traj_train(optimizer_feat, datasize=datasize)
+            sch.step()
+
+    
+    def multi_traj_train(self, optims, datasize, verbose=True):
+        self.epoch += 1
+
+        epoch_data_loss = [] 
+        epoch_total_loss = []
+
+        self.train()
+        start_time = time.time()
+        optims.zero_grad(set_to_none=True)
+        for r in np.random.permutation(regions):  # one region at the time
+            # backprop = False
+            region, X, X_mask, y, y_mask, time_seq = next(iter(self.data_loaders[r])) 
+            try:
+                region_all = np.append(region_all,region)
+                X_all = torch.cat((X_all, X.to(self.device, non_blocking=True)), dim=0)
+                X_mask_all = torch.cat((X_mask_all, X_mask.to(self.device, non_blocking=True)), dim=0)
+                time_seq_all = torch.cat((time_seq_all, time_seq.to(self.device, non_blocking=True)), dim=0)
+                y_all = torch.cat((y_all, y.to(self.device, non_blocking=True)), dim=0)
+                y_mask_all = torch.cat((y_mask_all, y_mask.to(self.device, non_blocking=True)), dim=0)
+            except:
+                region_all = region
+                X_all = X.to(self.device, non_blocking=True)
+                X_mask_all = X_mask.to(self.device, non_blocking=True)
+                time_seq_all = time_seq.to(self.device, non_blocking=True)
+                y_all = y.to(self.device, non_blocking=True)
+                y_mask_all = y_mask.to(self.device, non_blocking=True)
+
+
+            # ''' KD loss '''
+            # if self.train_feat:
+            # forward feature module 
+        if self.epoch == 1:
+            self.minibatch = np.random.choice(np.arange(len(region_all)), datasize, replace=False)
+
+        region_all = region_all[self.minibatch]
+        X_all = X_all[self.minibatch,:,:]
+        X_mask_all = X_mask_all[self.minibatch,:,:]
+        time_seq_all = time_seq_all[self.minibatch,:,:]
+
+        y_all = y_all[self.minibatch,:,:]
+        y_mask_all = y_mask_all[self.minibatch,:]
+
+        states_prime, emb_prime = self.forward_feature(region_all,X_all,X_mask_all,time_seq_all)
+        data_loss = self.compute_loss(states_prime,y_all,y_mask_all)
+
+        total_loss = self.loss_weights['feat_data']*data_loss
+
+        total_loss.backward(retain_graph=False)
+
+        optims.step()
+        optims.zero_grad(set_to_none=True)
+            
+        epoch_total_loss.append(total_loss.detach().cpu().item())
+        epoch_data_loss.append(data_loss.detach().cpu().item())
+            
+        epoch_data_loss = np.array(epoch_data_loss).mean()
+        epoch_total_loss = np.array(epoch_total_loss).mean()
+
+        elapsed = time.time() - start_time
+
+        if verbose and self.epoch % 10 == 0:
+            print('Epoch: %d, Data-F: %.2e, Time: %.3f'
+                    %(self.epoch, epoch_data_loss.item(), elapsed))
+
+        ''' save losses '''
+        self.losses.append(epoch_total_loss)
+        self.data_losses.append(epoch_data_loss)
 
 
     def predict_save(self,suffix=''):
@@ -351,7 +455,7 @@ class Hosp(nn.Module):
         )
         df = pd.DataFrame(data.transpose(),columns=['k_ahead','hospitalization'])
         df['k_ahead'] = df['k_ahead'].astype('int8')
-        path = './results/{}/'.format(region)
+        path = './results/{}/{}/'.format(self.exp, region)
         if not os.path.exists(path):
             os.makedirs(path)
         model_name = 'hosp'+submodule
@@ -405,5 +509,20 @@ class Hosp(nn.Module):
         self.predict_save()
         # plot training losses
         self.plot_loss()
+
+
+    def multi_train_predict(self, num_traj=50, datasize=256):
+        EPOCHS = self.num_epochs
+
+        for i in range(num_traj):
+            self.encoder = EncoderModules(self.X_train.shape[2],self.device)
+            self.decoder = DecoderModules(self.device)
+            self.out_layer = OutputModules(device=self.device)
+
+            self._train_multi_traj(epochs=EPOCHS, datasize=datasize)
+
+            self.predict_save(suffix='traj{}'.format(i))
+            self.plot_loss(suffix2='traj{}'.format(i))
+        
 
     

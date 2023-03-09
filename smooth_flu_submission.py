@@ -128,6 +128,16 @@ if __name__ == "__main__":
     suffix='M1_10_vEW'+str(ew)
     print(suffix)
 
+    team='GT'
+    model='FluFNP'
+    date=ew.enddate() + timedelta(days=2)
+    datex=date
+    date=date.strftime("%Y-%m-%d") 
+    sub_path='./submissions-flu/'
+    sub_file=sub_path+date+'-'+team+'-'+model+'.csv'
+    if os.path.exists(sub_file):
+        os.remove(sub_file)
+
     for region in temp_regions:
         parse(region,ew,target_name,suffix,daily,WRITE_SUBMISSION_FILE,PLOT)
 

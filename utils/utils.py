@@ -218,6 +218,30 @@ def get_predictions_from_pkl(next,res_path,region,target='covid'):
     predictions = data_pickle[:,idx]
     return predictions
 
+def get_AR_predictions_from_pkl(res_path,region,target='covid'):
+    """ reads from pkl, returns predictions for a region as a list"""
+    week_current = int(str(Week.thisweek(system="CDC") - 1)[-2:])
+    week_current = str(week_current)
+    if len(week_current)==1:
+        week_current = '0'+week_current
+    if target=='covid':
+        path=res_path+'mort_deploy_week_' + week_current +'_predictions.pkl' 
+    elif target=='flu':
+        path=res_path+'flu_deploy_week_' + week_current +'_feats_predictions.pkl'
+
+    if not os.path.exists(path):
+        print(path)
+        return None
+    predictions = []
+    
+    with open(path, 'rb') as f:
+        data_pickle = pickle.load(f)
+    
+    idx = regions_list.index(region)
+    predictions = data_pickle[:,idx,:]
+    predictions = np.median(predictions,0)
+    return predictions
+
 def collect_and_correct(k_ahead,res_path,target,region,death_replace_last3,death_replace_last2,death_replace_last1,mode):
     medians = []
     for nextk in range(1,k_ahead+1):

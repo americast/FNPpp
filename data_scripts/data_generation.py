@@ -36,6 +36,7 @@ import numpy as np
 import math
 import glob
 import copy
+
 from datetime import datetime
 from datetime import timedelta
 from datetime import date
@@ -940,7 +941,7 @@ def find_date_index(dates,cur_date,date_string=1):
     cmonth=int(month)
     year=int(year)
     
-    if year==20 or year==21 or year==22:
+    if year==20 or year==21 or year==22 or year==23:
         stryear='20'+str(year)
         year=int(stryear)
     
@@ -1075,7 +1076,7 @@ def read_vaccine_doses(inputdir,epiweek_date,state_index,dic_names_to_abbv):
     
     for ix,row in data.iterrows():
         w_idx=find_date_index(epiweek_date,row['Date'],date_string=2)
-        if row['Province_State'] in state_names and w_idx!=-1 and row['Vaccine_Type']=='All':
+        if row['Province_State'] in state_names and w_idx!=-1:
             #state_id=state_index[row['stabbr']] 
             state_id=state_index[dic_names_to_abbv[row['Province_State']]] 
             for c in cols:
@@ -1537,22 +1538,31 @@ def read_covidnet(data_covidnet,week_len,start,end,step,weekly_rate,region): #re
                     else:
                         covid[43+step+mmr_week]=float(row[weekly_rate])
             elif year==2022:
-                if mmr_week<=end:
+                if mmr_week<=52:
                     if region=='Entire Network':
                         if row['NETWORK']=='COVID-NET':
                             covid[95+step+mmr_week]=float(row[weekly_rate])
                     else:
                         covid[95+step+mmr_week]=float(row[weekly_rate])
+            # start leo
+            elif year==2023:
+                if mmr_week<=end:
+                    if region=='Entire Network':
+                        if row['NETWORK']=='COVID-NET':
+                            covid[147+step+mmr_week]=float(row[weekly_rate])
+                    else:
+                        covid[147+step+mmr_week]=float(row[weekly_rate])
+            # end leo
     return covid
 
 def read_covidnet_data(inputdir,epiweek_date,state_index,dic_names_to_abbv,start_week,end_week,step,num_epiweek):
     #data_covidnet=pd.read_csv(inputdir+"COVID-NET_Processed.csv",delimiter=',')
     if date.today().weekday() != 6:
         week_num = (date.today()-timedelta(days=2)).strftime("%U")
-        year_week_num = "2022" + week_num
+        year_week_num = "2023" + week_num
     else:
         week_num = (date.today()-timedelta(days=1)).strftime("%U")
-        year_week_num = "2022" + week_num
+        year_week_num = "2023" + week_num
         
     file_name = "COVID-NET_v"+year_week_num + ".csv"
     data_covidnet=pd.read_csv(file_name,delimiter=',')
@@ -1578,7 +1588,7 @@ def read_covidnet_data(inputdir,epiweek_date,state_index,dic_names_to_abbv,start
         #print(state,state_index[st])
         covidnet_week=read_covidnet(data_covidnet,num_epiweek,start_week,end_week,step,weekly_rate,region=state)
         for week in range(0,num_epiweek):
-            start,end=map_epiweek_to_date(week+1,epiweek_date,num_epiweek,week_string=False,year=2022)
+            start,end=map_epiweek_to_date(week+1,epiweek_date,num_epiweek,week_string=False,year=2023)
             week_cases[state_index[st]][start:end+1]=[covidnet_week[week]]*(end-start+1)
     
     covidnet_dic={}
@@ -1590,13 +1600,15 @@ def read_covidnet_data(inputdir,epiweek_date,state_index,dic_names_to_abbv,start
 # In[57]:
 
 
-def get_epiweek_index(cur_date,start_week,end_week,year=2022):
+def get_epiweek_index(cur_date,start_week,end_week,year=2023):
     #print('epiweek_index',cur_date)
     week_num = date.today().strftime("%U")
-    year_week_num = "2022" + week_num
+    year_week_num = "2023" + week_num
     epiweek1,epiweek_date1=get_epiweek_list(start_week,'202053',2020)
     epiweek2,epiweek_date2=get_epiweek_list('202101','202152',2021)
-    epiweek3,epiweek_date3=get_epiweek_list('202201',year_week_num,2022)
+    # epiweek3,epiweek_date3=get_epiweek_list('202201',year_week_num,2022)
+    epiweek3,epiweek_date3=get_epiweek_list('202201','202252',2022)
+    epiweek4,epiweek_date4=get_epiweek_list('202301',year_week_num,2023)
     #epiweek=epiweek1+epiweek2
     #epiweek_date=epiweek_date1+epiweek_date2
     for d in range(0,len(epiweek_date1)):
@@ -1609,10 +1621,15 @@ def get_epiweek_index(cur_date,start_week,end_week,year=2022):
     for d in range(0, len(epiweek_date3)):
         if cur_date==epiweek_date3[d]:
             return int(epiweek3[d][4:])+105
-    
+
+    # start leo
+    for d in range(0, len(epiweek_date4)):
+        if cur_date==epiweek_date4[d]:
+            return int(epiweek4[d][4:])+157
+    # end leo
     return -1
             
-def map_epiweek_to_date(week,epiweek_date,num_epiweek,week_string=True,year=2022):
+def map_epiweek_to_date(week,epiweek_date,num_epiweek,week_string=True,year=2023):
     if week_string:
         stryear=int(week[:4])
         week=int(week[4:])
@@ -1621,17 +1638,19 @@ def map_epiweek_to_date(week,epiweek_date,num_epiweek,week_string=True,year=2022
     if year==2020:
         end_week=str(year)+str(num_epiweek)
     else:
-        pos=num_epiweek%106+1
+        pos=num_epiweek%158+1
         end_week=str(year)+str(pos)
     #start_week=str(year)+'01'
     start_week='202001'
     epiweek1, week_dates1=get_epiweek_list('202001','202053',2020)
     epiweek2,week_dates2=[],[]
     epiweek2, week_dates2=get_epiweek_list('202101','202152',2021)
-    epiweek3, week_dates3=get_epiweek_list('202201', end_week, year)
+    # epiweek3, week_dates3=get_epiweek_list('202201', end_week, year)
+    epiweek3,week_dates3=get_epiweek_list('202201','202252',2022)
+    epiweek4,week_dates4=get_epiweek_list('202301',end_week,2023)
     
-    epiweek=epiweek1+epiweek2+epiweek3
-    week_dates=week_dates1+week_dates2+week_dates3
+    epiweek=epiweek1+epiweek2+epiweek3+epiweek4
+    week_dates=week_dates1+week_dates2+week_dates3+week_dates4
     if week-2<0:
         #week_date_start_str=str(year)+'-01-01' #2020-01-01, 2021-01-01
         week_date_start_str='2020-01-01' #2020-01-01, 2021-01-01
@@ -1760,7 +1779,7 @@ def read_excess_death(inputdir,epiweek_date,state_index,dic_names_to_abbv,start_
         if name in state_names and cy>=this_year:# and cm<=this_month:
             cur_date=y+'-'+m+'-'+d
             week=get_epiweek_index(cur_date,start_week,end_week)
-            start,end=map_epiweek_to_date(week,epiweek_date,num_epiweek,week_string=False,year=2022)
+            start,end=map_epiweek_to_date(week,epiweek_date,num_epiweek,week_string=False,year=2023)
             state_id=state_index[dic_names_to_abbv[name]]
             #print(week,start,end)
             for c in cols_death:
@@ -1835,14 +1854,14 @@ def read_emergency(inputdir,epiweek_date,state_index,start_week,end_week):
 # In[70]:
 
 
-def merge_data_state(mobility,cdc_hosp,vacc,covidnet,excess,jhu,jhu_case,hosp_new_res,
+def merge_data_state(mobility,cdc_hosp,vacc,covidnet,excess,jhu,jhu_case,hosp_new_res,symptom,
                      cols_m,cols_cdc,cols_vacc,cols_net,cols_excess,
-                     cols_jhu,cols_jhu_case,cols_hosp_new_res,
+                     cols_jhu,cols_jhu_case,cols_hosp_new_res,cols_symptom,
                      state_fips,epiweek,epiweek_date,region_names,outputdir,outfilename):
     
     cols_common=['date','epiweek','region','fips']
     #all_cols=cols_common+cols_m+cols_a+cols_cdc+cols_d+cols_k+cols_q+cols_net+cols_hosp+cols_excess+cols_jhu+cols_survey+cols_v
-    all_cols=cols_common+cols_m+cols_cdc+cols_vacc+cols_net+cols_excess+cols_jhu+cols_jhu_case+cols_hosp_new_res
+    all_cols=cols_common+cols_m+cols_cdc+cols_vacc+cols_net+cols_excess+cols_jhu+cols_jhu_case+cols_hosp_new_res+cols_symptom
     #all_cols=cols_common+cols_m+cols_a+cols_d+cols_k+cols_net+cols_hosp+cols_excess+cols_jhu+cols_survey+cols_v
     print(all_cols)
     final_data=pd.DataFrame(columns=all_cols)
@@ -1883,7 +1902,9 @@ def merge_data_state(mobility,cdc_hosp,vacc,covidnet,excess,jhu,jhu_case,hosp_ne
             temp_data[c]=jhu_case[c][reg][:]
         for c in cols_hosp_new_res:
             temp_data[c]=hosp_new_res[c][reg][:]
-        
+        for c in cols_symptom:
+            temp_data[c]=symptom[c][reg][:]
+
         temp_data=temp_data[all_cols]
         final_data=final_data.append(temp_data,ignore_index=True)
     
@@ -2041,7 +2062,7 @@ def find_week_index(week,cur_date,date_string=True,strsplit='-'):
     cmonth=int(month)
     year=int(year)
     
-    if year==20 or year==21 or year == 22:
+    if year==20 or year==21 or year==22 or year==23:
         stryear='20'+str(year)
         year=int(stryear)
         
@@ -2061,3 +2082,60 @@ def find_week_index(week,cur_date,date_string=True,strsplit='-'):
     print('week index not found:'+cur_date)
     print(cdate,cmonth,year)
     return -1
+
+
+def read_google_symptoms(inputdir,epiweek_date,state_index,dic_names_to_abbv):
+    data1 = pd.read_csv('2020_country_daily_2020_US_daily_symptoms_dataset.csv')
+    data2 = pd.read_csv('2021_country_daily_2021_US_daily_symptoms_dataset.csv')
+    data3 = pd.read_csv('2022_country_daily_2022_US_daily_symptoms_dataset.csv')
+    frames = [data1,data2,data3]
+    data = pd.concat(frames)
+    data=data.drop(data[data['sub_region_1'] == 'Hawaii'].index)
+    print('data')
+    columns = ['country_region', 'sub_region_1', 'date', "symptom:Fever",
+    "symptom:Low-grade fever",
+    "symptom:Cough",
+    "symptom:Sore throat",
+    "symptom:Headache",
+    "symptom:Fatigue",
+    "symptom:Vomiting",
+    "symptom:Diarrhea",
+    "symptom:Shortness of breath",
+    "symptom:Chest pain",
+    "symptom:Dizziness",
+    "symptom:Confusion",
+    "symptom:Generalized tonic–clonic seizure",
+    "symptom:Weakness"]
+    data = data[columns]
+    data['sub_region_1'] = data['sub_region_1'].apply(lambda x: "X" if (isinstance(x, float)) else dic_names_to_abbv[x])
+    print(data)
+    state_names=list(dic_names_to_abbv.keys())
+    num_states = len(state_names)
+    #print(cols)
+    cols = columns[3:]
+    week_cases={}
+    for c in cols:
+        week_cases[c]=np.empty((num_states,len(epiweek_date)))
+        week_cases[c][:][:]=np.nan
+        '''
+        week_cases[c]=np.zeros((num_states,len(epiweek_date)))
+        if (len(epiweek_date)-end_day)!=0:
+            total_len=len(epiweek_date)-end_day
+            week_cases[c][:][-total_len:]=np.nan
+        '''
+    print(cols)
+    #'''
+    for ix,row in data.iterrows():
+        state_id=state_index[row['sub_region_1']]
+        week_id=find_date_index(epiweek_date,str(row['date']),date_string=2)
+        if week_id!=-1:
+            for c in cols:
+                if pd.isnull(row[c])==False:
+                    if np.isnan(week_cases[c][state_id][week_id]):
+                            week_cases[c][state_id][week_id]=0
+                    week_cases[c][state_id][week_id]=row[c]
+    
+    unit_test(week_cases,cols,epiweek_date,state_index,"unit_test_date/google-symptoms.csv")
+    #'''
+    
+    return week_cases,cols
