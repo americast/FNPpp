@@ -14,35 +14,35 @@ import sys
 
 parser = OptionParser()
 parser.add_option("-m", "--model_type", dest="model_type", default="normal", type="string") # normal, cnn, slidingwindow, preprocess, slidingwindow_cnn, rag, slidingwindow_rag
-parser.add_option("--size", dest="window_size", default=10, type="int")
-parser.add_option("--stride", dest="window_stride", default=10, type="int")
+parser.add_option("--size", dest="window_size", default=128, type="int")
+parser.add_option("--stride", dest="window_stride", default=1000, type="int")
 # parser.add_option("-f", "--files", dest="file_names", default="sliding_model_202252_True_0.001_500_4", type="string")
 # parser.add_option("-f", "--files", dest="file_names", default="sliding_model_202252_True_0.001_500_4", type="string")
 # parser.add_option("-s", "--state", dest="state", default="AR", type="string")
 (options, args) = parser.parse_args()
 
 # if options.model_type == "normal":
-#     file_initials = "power_power_stable_predictions/normal_disease_flu_epiweek_202252_weekahead_"
-#     writer = SummaryWriter("runs/flu/flu_normal_epiweek"+str(options.epiweek))
+#     file_initials = "power_power_stable_predictions/normal_disease_power_epiweek_202252_weekahead_"
+#     writer = SummaryWriter("runs/power/power_normal_epiweek"+str(options.epiweek))
 if "slidingwindow" in options.model_type and "cnn" in options.model_type:
         file_initials = "power_cnn_power_stable_predictions_slidingwindow/cnn_slidingwindow_disease_power_weekahead_"
-        # writer = SummaryWriter("runs/flu/flu_cnn_slidingwindowpreprocessed_epiweek"+str(options.epiweek)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
+        # writer = SummaryWriter("runs/power/power_cnn_slidingwindowpreprocessed_epiweek"+str(options.epiweek)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
 elif "slidingwindow" in options.model_type and "rag" in options.model_type:
         file_initials = "power_rag_power_stable_predictions_slidingwindow/rag_slidingwindow_disease_power_weekahead_"
-        # file_initials = "flu_rag_hosp_stable_predictions_slidingwindow/rag_slidingwindow_disease_flu_epiweek_202252_weekahead_"
-        # writer = SummaryWriter("runs/flu/flu_rag_slidingwindowpreprocessed_epiweek"+str(options.epiweek)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))        
+        # file_initials = "power_rag_hosp_stable_predictions_slidingwindow/rag_slidingwindow_disease_power_epiweek_202252_weekahead_"
+        # writer = SummaryWriter("runs/power/power_rag_slidingwindowpreprocessed_epiweek"+str(options.epiweek)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))        
 elif "preprocess" in options.model_type:
-        file_initials = "flu_hosp_stable_predictions_slidingwindow/slidingwindowpreprocessed_disease_flu_epiweek_202252_weekahead_"
-        # writer = SummaryWriter("runs/flu/flu_slidingwindowpreprocessed_epiweek"+str(options.epiweek)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
+        file_initials = "power_hosp_stable_predictions_slidingwindow/slidingwindowpreprocessed_disease_power_epiweek_202252_weekahead_"
+        # writer = SummaryWriter("runs/power/power_slidingwindowpreprocessed_epiweek"+str(options.epiweek)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
 # elif "cnn" in options.model_type:
-#         file_initials = "flu_cnn_hosp_stable_predictions/cnn_disease_flu_epiweek_202252_weekahead_"
-#         writer = SummaryWriter("runs/flu/flu_cnn_disease_flu_epiweek"+str(options.epiweek))
+#         file_initials = "power_cnn_hosp_stable_predictions/cnn_disease_power_epiweek_202252_weekahead_"
+#         writer = SummaryWriter("runs/power/power_cnn_disease_power_epiweek"+str(options.epiweek))
 # elif "rag" in options.model_type:
-#         file_initials = "flu_rag_hosp_stable_predictions/rag_disease_flu_epiweek_202252_weekahead_"
-#         writer = SummaryWriter("runs/flu/flu_rag_disease_flu_epiweek"+str(options.epiweek))
+#         file_initials = "power_rag_hosp_stable_predictions/rag_disease_power_epiweek_202252_weekahead_"
+#         writer = SummaryWriter("runs/power/power_rag_disease_power_epiweek"+str(options.epiweek))
 else:
         file_initials = "power_power_stable_predictions_slidingwindow/slidingwindow_disease_power_weekahead_"
-        # writer = SummaryWriter("runs/flu/flu_slidingwindow_epiweek"+str(options.epiweek)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
+        # writer = SummaryWriter("runs/power/power_slidingwindow_epiweek"+str(options.epiweek)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
 
 
 def get_metrics(file_name, epiweek_now, ahead):
@@ -183,16 +183,15 @@ for state in states:
 
 # counter = -1
 for ah in week_ahead:
-    if "preprocess" in options.model_type or "slidingwindow" in options.model_type:
-        with open(file_initials+str(ah)+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)+"_predictions.pkl", "rb") as f:
-            data_pickle = pickle.load(f)
-    else:
-        with open(file_initials+str(ah)+"_predictions.pkl", "rb") as f:
-            data_pickle = pickle.load(f)
+    # if "preprocess" in options.model_type or "slidingwindow" in options.model_type:
+    with open(file_initials+str(ah)+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)+"_predictions.pkl", "rb") as f:
+        data_pickle = pickle.load(f)
+    # else:
+    #     with open(file_initials+str(ah)+"_predictions.pkl", "rb") as f:
+    #         data_pickle = pickle.load(f)
 
     for st, state in enumerate(states):
         if ah == 1:
-            pu.db
             plot_dict[state][0] = data_pickle[2][st].tolist()
             plot_dict[state][1] = [0 for x in range(len(plot_dict[state][0]))]
             plot_dict[state][2] = data_pickle[2][st].tolist()
@@ -220,9 +219,9 @@ all_devs = []
 all_yts = []
 for st, state in enumerate(states):
     plt.figure(st)
-    yp = np.array(plot_dict[state][0][-10:])
-    dev = np.array(plot_dict[state][1][-10:]) * 1.95
-    yt = np.array(plot_dict[state][2][-10:])
+    yp = np.array(plot_dict[state][0])
+    dev = np.array(plot_dict[state][1]) * 1.95
+    yt = np.array(plot_dict[state][2])
     plt.plot(yp, label="Predicted 95%", color="blue")
     plt.fill_between(np.arange(len(yp)), yp + dev, yp - dev, color="blue", alpha=0.2)
     plt.plot(yt, label="True Value", color="green")
@@ -247,7 +246,7 @@ for st, state in enumerate(states):
 
 
 
-    plot_name = f"plots_flu/"+state
+    plot_name = f"plots_power/"+str(state)
     if options.model_type is not "normal":
         if "cnn" in options.model_type and "slidingwindow" in options.model_type:
             plot_name = plot_name+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)+"_cnn"
@@ -262,7 +261,7 @@ for st, state in enumerate(states):
         elif "preprocess" in options.model_type:
             plot_name = plot_name+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)+"_preprocessed"
         else:
-            plot_name = f"plots_flu/"+state+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)
+            plot_name = f"plots_power/"+str(state)+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)
        
     plot_name = plot_name + ".png"
     # pu.db

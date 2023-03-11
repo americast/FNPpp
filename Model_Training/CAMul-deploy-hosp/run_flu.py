@@ -5,7 +5,7 @@ from optparse import OptionParser
 import sys
 parser = OptionParser()
 parser.add_option("--epiweek_start", dest="epiweek_start", default="202232", type="string")
-parser.add_option("--epiweek_end", dest="epiweek_end", default="202252", type="string")
+parser.add_option("--epiweek_end", dest="epiweek_end", default="202310", type="string")
 parser.add_option("-d", "--disease", dest="disease", default="flu", type="string")
 parser.add_option("--epochs", dest="epochs", default=300, type="int")
 parser.add_option("--cnn", dest="cnn", action="store_true", default=False)
@@ -13,7 +13,11 @@ parser.add_option("--rag", dest="rag", action="store_true", default=False)
 
 # epiweeks = list(range(202101, 202153))
 (options, args) = parser.parse_args()
-epiweeks = list(range(int(options.epiweek_start), int(options.epiweek_end)))
+if "2023" in options.epiweek_end:
+    epiweeks = list(range(int(options.epiweek_start), 202252)) + list(range(202301, int(options.epiweek_end)))
+else:
+    epiweeks = list(range(int(options.epiweek_start), int(options.epiweek_end)))
+
 # pu.db
 
 if options.cnn and options.rag:

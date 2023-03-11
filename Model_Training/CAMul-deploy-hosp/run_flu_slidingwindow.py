@@ -5,19 +5,24 @@ from optparse import OptionParser
 import sys
 parser = OptionParser()
 parser.add_option("--epiweek_start", dest="epiweek_start", default="202232", type="string")
-parser.add_option("--epiweek_end", dest="epiweek_end", default="202252", type="string")
+parser.add_option("--epiweek_end", dest="epiweek_end", default="202310", type="string")
 parser.add_option("-d", "--disease", dest="disease", default="flu", type="string")
 parser.add_option("--epochs", dest="epochs", default=300, type="int")
-parser.add_option("--size", dest="window_size", type="int", default=17)
-parser.add_option("--stride", dest="window_stride", type="int", default=15)
+parser.add_option("--size", dest="window_size", type="int", default=10)
+parser.add_option("--stride", dest="window_stride", type="int", default=10)
 parser.add_option("--preprocess", dest="preprocess", action="store_true", default=False)
 parser.add_option("--cnn", dest="cnn", action="store_true", default=False)
 parser.add_option("--rag", dest="rag", action="store_true", default=False)
+parser.add_option("-p", "--use-pretrained", dest="use_pretrained", action="store_true", default=False)
 
 
 # epiweeks = list(range(202101, 202153))
 (options, args) = parser.parse_args()
-epiweeks = list(range(int(options.epiweek_start), int(options.epiweek_end)))
+if "2023" in options.epiweek_end:
+    epiweeks = list(range(int(options.epiweek_start), 202252)) + list(range(202301, int(options.epiweek_end)))
+else:
+    epiweeks = list(range(int(options.epiweek_start), int(options.epiweek_end)))
+
 # pu.db
 
 if options.cnn and options.rag:
@@ -151,6 +156,8 @@ for pat in patience:
                                 str(options.window_size),
                             ] + to_run
                     
+                    if options.use_pretrained:
+                        to_run = to_run + ["--start_model", "/localscratch/ssinha97/fnp_saved_models/fluhosp_models/normal_disease_flu_epiweek_"+str(week)+"_weekahead_"+str(ah)]
                     subprocess.run(
                         to_run
                     )

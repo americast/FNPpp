@@ -24,7 +24,7 @@ from tqdm import tqdm
 from itertools import product
 
 parser = OptionParser()
-parser.add_option("-p", "--epiweek_pres", dest="epiweek_pres", default="202252", type="string")
+parser.add_option("-p", "--epiweek_pres", dest="epiweek_pres", default="202310", type="string")
 parser.add_option("-e", "--epiweek", dest="epiweek", default="202232", type="string")
 parser.add_option("--epochs", dest="epochs", default=3500, type="int")
 parser.add_option("--lr", dest="lr", default=1e-3, type="float")
@@ -59,8 +59,6 @@ lr = options.lr
 epochs = options.epochs
 patience = options.patience
 disease = options.disease
-
-epiweek_start = "202140"
 
 if options.rag and options.cnn:
     print("Cannot have cnn and rag together")
@@ -396,7 +394,7 @@ val_loader_with_states = torch.utils.data.DataLoader(
     val_dataset_with_states, batch_size=batch_size, shuffle=True
 )
 if start_model != "None":
-    load_model("./"+disease+"hosp_models", file=start_model)
+    load_model("/", file=start_model)
     print("Loaded model from", start_model)
 
 opt = torch.optim.Adam(

@@ -629,7 +629,10 @@ for ep in range(epochs):
     if val_err < min_val_err:
         min_val_err = val_err
         min_val_epoch = ep
-        save_model("/nvmescratch/ssinha97/"+disease+"power_models")
+        try:
+            save_model("/nvmescratch/ssinha97/"+disease+"power_models")
+        except:
+            save_model("/localscratch/ssinha97/"+disease+"power_models")
         print("Saved model")
     print()
     print()
@@ -646,19 +649,21 @@ else:
         pickle.dump(all_results, f)
 
 # Now we get results
-load_model("/nvmescratch/ssinha97/"+disease+"power_models")
-Y_test, As = test_step(X_test, X_ref, samples=2000)
-Y_test = Y_test.squeeze()
-
-Y_test_unnorm = scaler.inverse_transform_idx(Y_test, label_idx)
+try:
+    load_model("/nvmescratch/ssinha97/"+disease+"power_models")
+except:
+    load_model("/localscratch/ssinha97/"+disease+"power_models")
+Y_pred, As = test_step(X_test, X_ref, samples=2000)
+Y_pred = Y_pred.squeeze()
+Y_pred_unnorm = scaler.inverse_transform_idx(Y_pred, label_idx)
 X_test_unnorm = scaler.inverse_transform_idx(X_test, label_idx)
-
+Y_test_unnorm = scaler.inverse_transform_idx(Y_test, label_idx)
 # Save predictions
 if options.sliding_window:
     os.makedirs(f"./"+disease+"_power_stable_predictions_slidingwindow", exist_ok=True)
     with open(f"./"+disease+"_power_stable_predictions_slidingwindow/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
-        pickle.dump([Y_test_unnorm, X_test_unnorm[:, label_idx], As], f)
+        pickle.dump([Y_pred_unnorm, Y_test_unnorm, X_test_unnorm[:, :, label_idx], As], f)
 else:
     os.makedirs(f"./"+disease+"_power_stable_predictions", exist_ok=True)
     with open(f"./"+disease+"_power_stable_predictions/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
-        pickle.dump([Y_test_unnorm, X_test_unnorm[:, label_idx], As], f)
+        pickle.dump([Y_pred_unnorm, Y_test_unnorm, X_test_unnorm[:, :, label_idx], As], f)
