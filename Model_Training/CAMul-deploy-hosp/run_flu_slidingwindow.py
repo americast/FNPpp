@@ -8,6 +8,7 @@ parser.add_option("--epiweek_start", dest="epiweek_start", default="202232", typ
 parser.add_option("--epiweek_end", dest="epiweek_end", default="202310", type="string")
 parser.add_option("-d", "--disease", dest="disease", default="flu", type="string")
 parser.add_option("--epochs", dest="epochs", default=300, type="int")
+parser.add_option("--auto-size-best-num", dest="auto_size_best_num", default=None, type="int")
 parser.add_option("--size", dest="window_size", type="int", default=10)
 parser.add_option("--stride", dest="window_stride", type="int", default=10)
 parser.add_option("--preprocess", dest="preprocess", action="store_true", default=False)
@@ -116,7 +117,10 @@ for pat in patience:
             for week in tqdm(epiweeks):
                 for ah in ahead:
                     to_run = []
-                    save_model = f"slidingwindow_disease_{options.disease}_epiweek_{week}_weekahead_{ah}_wsize_{options.window_size}_wstride_{options.window_stride}"
+                    if options.auto_size_best_num is not None:
+                        save_model = f"slidingwindow_disease_{options.disease}_epiweek_{week}_weekahead_{ah}_autosize_{options.auto_size_best_num}"
+                    else:
+                        save_model = f"slidingwindow_disease_{options.disease}_epiweek_{week}_weekahead_{ah}_wsize_{options.window_size}_wstride_{options.window_stride}"
 
                     if options.preprocess:
                         save_model = f"slidingwindowpreprocessed_disease_{options.disease}_epiweek_{week}_weekahead_{ah}_wsize_{options.window_size}_wstride_{options.window_stride}"
@@ -128,6 +132,8 @@ for pat in patience:
                     elif options.rag:
                         save_model = "rag_" + save_model
                         to_run = ["--rag"] + to_run
+                    if options.auto_size_best_num is not None:
+                        to_run = ["--auto-size-best-num", str(options.auto_size_best_num)] + to_run
 
                     print(f"Training {save_model}")
                     

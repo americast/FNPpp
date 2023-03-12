@@ -38,6 +38,7 @@ parser.add_option("-c", "--cuda", dest="cuda", default=True, action="store_true"
 parser.add_option("--start", dest="start_day", default=-120, type="int")
 parser.add_option("-t", "--tb", action="store_true", dest="tb", default=False)
 parser.add_option("-W", "--use-sliding-window", dest="sliding_window", default=False, action="store_true")
+parser.add_option("--auto-size-best-num", dest="auto_size_best_num", default=None, type="int")
 parser.add_option("--sliding-window-size", dest="window_size", type="int", default=17)
 parser.add_option("--sliding-window-stride", dest="window_stride", type="int", default=15)
 parser.add_option("--disease", dest="disease", type="string", default="covid")
@@ -282,10 +283,29 @@ def batched_compute_pcc(x, y):
     return (cov / (torch.sqrt(var_x)+1e-6)) / (torch.sqrt(var_y)+1e-6)
 
 if options.sliding_window:
-    ilk = options.window_size
+    if options.auto_size_best_num is not None:
+        lags = [2*x for x in range(1, 30)]
+        all_sorted_idxs = []
+        for st_idx, st_here in zip(states_to_consider_indices, states_to_consider):
+            series_here = X_ref[st_idx][30:-30]
+            acs = []
+            for lag in lags:
+                ac_here = []
+                for it in range(len(series_here)-1, lag-1, -1):
+                    ac_here.append(series_here[it] * series_here[it - lag])
+                acs.append(np.mean(np.array(ac_here)))
+            sorted_indices = np.flip(np.argsort(acs))
+            all_sorted_idxs.extend(sorted_indices.tolist())
+        lag_idxs = np.unique(all_sorted_idxs, return_counts=True)[0].tolist()
+        lags_needed = [lags[li] for li in lag_idxs]
+        ilk = lags_needed[options.auto_size_best_num]
+        ils = lags_needed[options.auto_size_best_num]
+    else:
+        ilk = options.window_size
+        ils = options.window_stride
     # """
     to_concat = []
-    for w in range(0, X_ref.shape[1] - ilk + 1, options.window_stride):
+    for w in range(0, X_ref.shape[1] - ilk + 1, ils):
         to_concat.append(X_ref[:,w:w + ilk])
     
     X_ref_orig_shape = X_ref.shape
@@ -517,6 +537,9 @@ for ep in range(epochs):
     print("---------------Details-----------------")
     print("Epiweek: "+str(options.epiweek))
     print("Week ahead: "+str(options.day_ahead))
+    if options.auto_size_best_num is not None:
+        print("Auto num: "+str(options.auto_size_best_num))
+        print("Window size: "+str(ilk))
     print("---------------------------------------")
     train_loss, train_err, yp, yt = train_step(train_loader, X_train, Y_train, X_ref)
     print(f"Train loss: {train_loss:.4f}, Train err: {train_err:.4f}")
@@ -561,10 +584,20 @@ Y_test = Y_test.squeeze()
 Y_test_unnorm = scaler.inverse_transform_idx_selected_states(Y_test, label_idx)
 # Save predictions
 if options.sliding_window:
-    os.makedirs(f"./"+disease+"_hosp_stable_predictions_slidingwindow", exist_ok=True)
-    with open(f"./"+disease+"_hosp_stable_predictions_slidingwindow/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
-        pickle.dump([Y_test_unnorm, all_labels[states_to_consider_indices], raw_data_unnorm[:,:,label_idx][states_to_consider_indices], As], f)
+    try:
+        os.makedirs(f"/nvmescratch/ssinha97/fnp_evaluations/"+disease+"_hosp_stable_predictions_slidingwindow", exist_ok=True)
+        with open(f"/nvmescratch/ssinha97/fnp_evaluations/"+disease+"_hosp_stable_predictions_slidingwindow/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
+            pickle.dump([Y_test_unnorm, all_labels[states_to_consider_indices], raw_data_unnorm[:,:,label_idx][states_to_consider_indices], As], f)
+    except:
+        os.makedirs(f"/localscratch/ssinha97/fnp_evaluations/"+disease+"_hosp_stable_predictions_slidingwindow", exist_ok=True)
+        with open(f"/localscratch/ssinha97/fnp_evaluations/"+disease+"_hosp_stable_predictions_slidingwindow/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
+            pickle.dump([Y_test_unnorm, all_labels[states_to_consider_indices], raw_data_unnorm[:,:,label_idx][states_to_consider_indices], As], f)
 else:
-    os.makedirs(f"./"+disease+"_hosp_stable_predictions", exist_ok=True)
-    with open(f"./"+disease+"_hosp_stable_predictions/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
-        pickle.dump([Y_test_unnorm, all_labels[states_to_consider_indices], raw_data_unnorm[:,:,label_idx][states_to_consider_indices], As], f)
+    try:
+        os.makedirs(f"/nvmescratch/ssinha97/fnp_evaluations/"+disease+"_hosp_stable_predictions", exist_ok=True)
+        with open(f"/nvmescratch/ssinha97/fnp_evaluations/"+disease+"_hosp_stable_predictions/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
+            pickle.dump([Y_test_unnorm, all_labels[states_to_consider_indices], raw_data_unnorm[:,:,label_idx][states_to_consider_indices], As], f)
+    except:
+        os.makedirs(f"/localscratch/ssinha97/fnp_evaluations/"+disease+"_hosp_stable_predictions", exist_ok=True)
+        with open(f"/localscratch/ssinha97/fnp_evaluations/"+disease+"_hosp_stable_predictions/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
+            pickle.dump([Y_test_unnorm, all_labels[states_to_consider_indices], raw_data_unnorm[:,:,label_idx][states_to_consider_indices], As], f)

@@ -312,7 +312,7 @@ for epiweek in tqdm(epiweeks):
             plt.savefig(f"plots_"+file_initials.split("_")[0]+"/heatmap_"+str(ah)+".png")
 
 all_rmse   = rmse(np.array(all_yps), np.array(all_yts))
-# all_nrmse  = nrmse(np.array(all_yps), np.array(all_yts))
+all_nrmse  = nrmse(np.array(all_yps), np.array(all_yts))
 # all_mape   = mape(np.array(all_yps), np.array(all_yts))
 all_crps   = crps_samples(np.array(all_yps), np.array(all_yts))
 all_cs     = get_pr(np.array(all_yps), np.array(all_devs)**2, np.array(all_yts))[1]
@@ -322,7 +322,7 @@ if "preprocess" in options.model_type or "slidingwindow" in options.model_type:
 else:
     txt_here = file_initials
 
-txt_here = "\n\nTotal\n"+txt_here+"\nRMSE: "+str(all_rmse)+"\nCRPS: "+str(all_crps)+"\nCS: "+str(all_cs)+"\n"
+txt_here = "\n\nTotal\n"+txt_here+"\nRMSE: "+str(all_rmse)+"\nNRMSE: "+str(all_nrmse)+"\nCRPS: "+str(all_crps)+"\nCS: "+str(all_cs)+"\n"
 print(txt_here)
 txt_all = txt_all + txt_here
 for st, state in enumerate(states):
@@ -332,14 +332,17 @@ for st, state in enumerate(states):
 
 
     statewise_rmse   = rmse(statewise_yp, statewise_yt)
-    # statewise_nrmse  = nrmse(statewise_yp, statewise_yt)
+    statewise_nrmse  = nrmse(statewise_yp, statewise_yt)
     # statewise_mape   = mape(statewise_yp, statewise_yt)
     statewise_crps   = crps_samples(statewise_yp, statewise_yt)
     statewise_cs     = get_pr(statewise_yp, statewise_dev**2, statewise_yt)[1]
 
-    txt_here = "\nState: "+str(state)+"\nRMSE: "+str(statewise_rmse)+"\nCRPS: "+str(statewise_crps)+"\nCS: "+str(statewise_cs)+"\n\n"
+    txt_here = "\nState: "+str(state)+"\nRMSE: "+str(statewise_rmse)+"\nNRMSE: "+str(statewise_nrmse)+"\nCRPS: "+str(statewise_crps)+"\nCS: "+str(statewise_cs)+"\n\n"
     print(txt_here)
     txt_all = txt_all + txt_here
+
+if "preprocess" in options.model_type or "slidingwindow" in options.model_type:
+    file_initials = file_initials+str(ah)+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)+"_"
 
 f = open("plots_flu/"+file_initials.split("/")[1]+"results.txt", "w")
 f.write(txt_all)
