@@ -84,22 +84,13 @@ states = [
     "X",
 ]
 
-# if options.epiweek is not None and int(options.epiweek)> 202153:
-subprocess.run(
-        [
-            "bash",
-            "./scripts/hosp_preprocess.sh",
-            options.epiweek_end,
-        ]
-    )
-# else:
-#     subprocess.run(
-#             [
-#                 "bash",
-#                 "./scripts/hosp_preprocess.sh",
-#                 str("202240"),
-#             ]
-#         )
+# subprocess.run(
+#         [
+#             "bash",
+#             "./scripts/hosp_preprocess.sh",
+#             options.epiweek_end,
+#         ]
+#     )
 
 # sample_out = [True, False]
 sample_out = [True]

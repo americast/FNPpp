@@ -282,24 +282,38 @@ def batched_compute_pcc(x, y):
     # var_y = sum([(b - mean_y) ** 2 for b in y])
     return (cov / (torch.sqrt(var_x)+1e-6)) / (torch.sqrt(var_y)+1e-6)
 
+kernel_size = 25
+avg = torch.nn.AvgPool1d(kernel_size=kernel_size, stride=1, padding=0)
+def moving_avg(x, kernel_size=25):
+    # padding on the both ends of time series
+    front = x[0:1].repeat((kernel_size - 1) // 2)
+    end = x[-1:].repeat((kernel_size - 1) // 2)
+    x = np.concatenate([front, x, end]).tolist()
+    with torch.no_grad():
+        x = avg(torch.tensor([[x]]))
+    x = x.detach().numpy().tolist()
+    return np.array(x[0][0])
+
 if options.sliding_window:
     if options.auto_size_best_num is not None:
-        lags = [2*x for x in range(1, 30)]
-        all_sorted_idxs = []
+        lags = [x for x in range(4, 30)]
+        idx_scores = [0 for x in range(len(lags))]
         for st_idx, st_here in zip(states_to_consider_indices, states_to_consider):
             series_here = X_ref[st_idx][30:-30]
+            series_here = series_here - moving_avg(series_here)
             acs = []
             for lag in lags:
                 ac_here = []
                 for it in range(len(series_here)-1, lag-1, -1):
                     ac_here.append(series_here[it] * series_here[it - lag])
                 acs.append(np.mean(np.array(ac_here)))
-            sorted_indices = np.flip(np.argsort(acs))
-            all_sorted_idxs.extend(sorted_indices.tolist())
-        lag_idxs = np.unique(all_sorted_idxs, return_counts=True)[0].tolist()
-        lags_needed = [lags[li] for li in lag_idxs]
-        ilk = lags_needed[options.auto_size_best_num]
-        ils = lags_needed[options.auto_size_best_num]
+            sorted_indices = np.flip(np.argsort(acs)).tolist()
+            for k, sindxs in enumerate(sorted_indices):
+                idx_scores[sindxs] += len(lags) - k
+
+        lags_needed_idxs = np.flip(np.argsort(idx_scores)).tolist()
+        ilk = lags[lags_needed_idxs[options.auto_size_best_num]]
+        ils = lags[lags_needed_idxs[options.auto_size_best_num]]
     else:
         ilk = options.window_size
         ils = options.window_stride
@@ -349,6 +363,8 @@ def load_model(folder, file=save_model_name):
     Load model
     """
     full_path = os.path.join(folder, file)
+    if not os.path.exists(full_path):
+        full_path = "/nvmescratch/"+full_path[14:]
     assert os.path.exists(full_path)
     feat_enc.load_state_dict(torch.load(os.path.join(full_path, "feat_enc.pt")))
     seq_enc.load_state_dict(torch.load(os.path.join(full_path, "seq_enc.pt")))
@@ -416,6 +432,8 @@ val_loader_with_states = torch.utils.data.DataLoader(
 if start_model != "None":
     load_model("/", file=start_model)
     print("Loaded model from", start_model)
+
+    
 
 opt = torch.optim.Adam(
     list(seq_enc.parameters())
