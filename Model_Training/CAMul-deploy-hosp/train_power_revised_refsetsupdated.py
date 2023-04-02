@@ -38,6 +38,7 @@ parser.add_option("-c", "--cuda", dest="cuda", default=True, action="store_true"
 parser.add_option("--start", dest="start_day", default=-120, type="int")
 parser.add_option("-t", "--tb", action="store_true", dest="tb", default=False)
 parser.add_option("-W", "--use-sliding-window", dest="sliding_window", default=False, action="store_true")
+parser.add_option("--auto-size-best-num", dest="auto_size_best_num", default=None, type="int")
 parser.add_option("--sliding-window-size", dest="window_size", type="int", default=17)
 parser.add_option("--sliding-window-stride", dest="window_stride", type="int", default=15)
 parser.add_option("--disease", dest="disease", type="string", default="power")
@@ -375,11 +376,45 @@ val_seqs, X_val, Y_val, mt_val, reg_val = sample_val(options.batch_size)
 test_seqs, X_test, Y_test, mt_test, reg_test = sample_test(options.batch_size)
 # pu.db
 
-
+kernel_size = 25
+avg = torch.nn.AvgPool1d(kernel_size=kernel_size, stride=1, padding=0)
+def moving_avg(x, kernel_size=25):
+    # padding on the both ends of time series
+    front = x[0:1].repeat((kernel_size - 1) // 2)
+    end = x[-1:].repeat((kernel_size - 1) // 2)
+    x = np.concatenate([front, x, end]).tolist()
+    with torch.no_grad():
+        x = avg(torch.tensor([[x]]))
+    x = x.detach().numpy().tolist()
+    return np.array(x[0][0])
 
 X_ref = np.expand_dims(X_ref, axis=0)
 if options.sliding_window:
-    ilk = options.window_size
+    if options.auto_size_best_num is not None:
+        lags = [x for x in range(100,1200,100)]
+        # pu.db
+        # for x in range(5,10:
+        #     lags.append(2**x)
+        idx_scores = [0 for x in range(len(lags))]
+        for st_idx in tqdm(range(7)):
+            series_here = X_ref[0, :, st_idx]
+            series_here = series_here - moving_avg(series_here)
+            acs = []
+            for lag in lags:
+                ac_here = []
+                for it in range(len(series_here)-1, lag-1, -1):
+                    ac_here.append(series_here[it] * series_here[it - lag])
+                acs.append(np.mean(np.array(ac_here)))
+            sorted_indices = np.flip(np.argsort(acs)).tolist()
+            for k, sindxs in enumerate(sorted_indices):
+                idx_scores[sindxs] += len(lags) - k
+
+        lags_needed_idxs = np.flip(np.argsort(idx_scores)).tolist()
+        ilk = lags[lags_needed_idxs[options.auto_size_best_num]]
+        ils = lags[lags_needed_idxs[options.auto_size_best_num]]
+    else:
+        ilk = options.window_size
+        ils = options.window_stride
     # """
     to_concat = []
     for w in range(0, X_ref.shape[1] - ilk + 1, options.window_stride):
@@ -616,7 +651,13 @@ min_val_epoch = 0
 all_results = {}
 for ep in range(epochs):
     print(f"Epoch {ep+1}")
+    print("---------------Details-----------------")
+    print("Week ahead: "+str(options.day_ahead))
+    if options.auto_size_best_num is not None:
+        print("Auto num: "+str(options.auto_size_best_num))
+        print("Window size: "+str(ilk))
     print("num refs: "+str(X_ref.shape[0]))
+    print("---------------------------------------")
     train_loss, train_err, yp, yt = train_step(train_loader, X_train, Y_train, X_ref)
     print(f"Train loss: {train_loss:.4f}, Train err: {train_err:.4f}")
     val_err, yp, yt, vars = val_step(val_loader_with_states, X_val, Y_val, X_ref)

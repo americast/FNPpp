@@ -16,6 +16,8 @@ parser = OptionParser()
 parser.add_option("-m", "--model_type", dest="model_type", default="normal", type="string") # normal, cnn, slidingwindow, preprocess, slidingwindow_cnn, rag, slidingwindow_rag
 parser.add_option("--size", dest="window_size", default=128, type="int")
 parser.add_option("--stride", dest="window_stride", default=1000, type="int")
+parser.add_option("--seed", dest="seed", default=0, type="int")
+
 # parser.add_option("-f", "--files", dest="file_names", default="sliding_model_202252_True_0.001_500_4", type="string")
 # parser.add_option("-f", "--files", dest="file_names", default="sliding_model_202252_True_0.001_500_4", type="string")
 # parser.add_option("-s", "--state", dest="state", default="AR", type="string")
@@ -45,27 +47,27 @@ else:
         # writer = SummaryWriter("runs/power/power_slidingwindow_epiweek"+str(options.epiweek)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
 
 
-def get_metrics(file_name, epiweek_now, ahead):
-    if not os.path.exists(file_name):
-        print(f"File {file_name} does not exist")
-        return None
+# def get_metrics(file_name, epiweek_now, ahead):
+#     if not os.path.exists(file_name):
+#         print(f"File {file_name} does not exist")
+#         return None
 
-    with open(file_name, "rb") as f:
-        fl_data = pickle.load(f)
-        predictions = fl_data[0][:, :, ahead-1]
-        ground_truth = fl_data[1][:]
+#     with open(file_name, "rb") as f:
+#         fl_data = pickle.load(f)
+#         predictions = fl_data[0][:, :, ahead-1]
+#         ground_truth = fl_data[1][:]
 
-    mean_preds = predictions.mean(axis=0)
-    std_preds = predictions.std(axis=0)
+#     mean_preds = predictions.mean(axis=0)
+#     std_preds = predictions.std(axis=0)
 
-    metrics = {
-        "rmse": rmse(mean_preds, ground_truth),
-        "nrmse": nrmse(mean_preds, ground_truth),
-        "mape": mape(mean_preds, ground_truth),
-        "crps": crps_samples(predictions.T, ground_truth),
-        "cs": get_pr(mean_preds, std_preds, ground_truth)[1],
-    }
-    return metrics
+#     metrics = {
+#         "rmse": rmse(mean_preds, ground_truth),
+#         "nrmse": nrmse(mean_preds, ground_truth),
+#         "mape": mape(mean_preds, ground_truth),
+#         "crps": crps_samples(predictions.T, ground_truth),
+#         "cs": get_pr(mean_preds, std_preds, ground_truth)[1],
+#     }
+#     return metrics
 
 
 # sample_out = [True, False]
@@ -182,9 +184,19 @@ for state in states:
     plot_dict[state] = [None, None, None]  # [pred_mean, pred_stddev, label]
 
 # counter = -1
-for ah in week_ahead:
+for ah in tqdm(week_ahead):
     # if "preprocess" in options.model_type or "slidingwindow" in options.model_type:
-    with open(file_initials+str(ah)+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)+"_predictions.pkl", "rb") as f:
+    if "autosize" in options.model_type:
+        file_to_load = file_initials+str(ah)+"_autosize_"+str(options.model_type[-1])
+    else:
+        file_to_load = file_initials+str(ah)+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)
+    
+    if options.seed != 0:
+        file_to_load = file_to_load+"_seed_"+str(options.seed)
+
+    file_to_load = file_to_load + "_predictions.pkl"
+
+    with open(file_to_load, "rb") as f:
         data_pickle = pickle.load(f)
     # else:
     #     with open(file_initials+str(ah)+"_predictions.pkl", "rb") as f:
@@ -217,7 +229,7 @@ for ah in week_ahead:
 all_yps = []
 all_devs = []
 all_yts = []
-for st, state in enumerate(states):
+for st, state in enumerate(tqdm(states)):
     plt.figure(st)
     yp = np.array(plot_dict[state][0])
     dev = np.array(plot_dict[state][1]) * 1.95
@@ -263,6 +275,15 @@ for st, state in enumerate(states):
         else:
             plot_name = f"plots_power/"+str(state)+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)
        
+
+
+    if "autosize" in options.model_type:
+        plot_name = plot_name.split("_")[0]+"_autosize_"+str(options.model_type[-1])
+        if "rag" in options.model_type:
+            plot_name = plot_name+"_rag"
+        if "cnn" in options.model_type:
+            plot_name = plot_name+"_cnn"
+            
     plot_name = plot_name + ".png"
     # pu.db
     plt.savefig(plot_name, bbox_inches = "tight")
@@ -297,10 +318,14 @@ all_crps   = crps_samples(np.array(all_yps), np.array(all_yts))
 all_cs     = get_pr(np.array(all_yps), np.array(all_devs)**2, np.array(all_yts))[1]
 
 if "preprocess" in options.model_type or "slidingwindow" in options.model_type:
-    txt = file_initials+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)
+    if "autosize" in options.model_type:
+        txt = file_initials+"_autosize_"+str(options.model_type[-1])
+    else:
+        txt = file_initials+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)
 else:
     txt = file_initials
-
+if options.seed != 0:
+    txt = txt + "_seed_"+str(options.seed)
 txt = "\n\n"+txt+"\nRMSE: "+str(all_rmse)+"\nCRPS: "+str(all_crps)+"\nCS: "+str(all_cs)
 print(txt)
 

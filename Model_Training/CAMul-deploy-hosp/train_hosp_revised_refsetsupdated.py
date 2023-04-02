@@ -3,7 +3,7 @@ import sys
 import numpy as np
 import pickle
 import os
-
+import pudb
 from optparse import OptionParser
 from torch.utils.tensorboard import SummaryWriter
 import itertools
@@ -174,6 +174,7 @@ else:
     label_idx = include_cols.index("cdc_hospitalized")
 all_labels = raw_data[:, -1, label_idx]
 print(f"Diff epiweeks: {diff_epiweeks(epiweek, epiweek_pres)}")
+# pu.db
 raw_data = raw_data[:, start_day:-day_ahead, :]
 
 raw_data_unnorm = raw_data.copy()
@@ -233,35 +234,67 @@ def prefix_sequences(seq, day_ahead=day_ahead):
         Y[i] = seq[i + day_ahead, label_idx]
     return X, Y
 
-
 X, Y = [], []
 for i, st in enumerate(states):
     if st in states_to_consider:
         x, y = prefix_sequences(raw_data[i])
         X.append(x)
         Y.append(y)
-X_train, Y_train = np.concatenate(X), np.concatenate(Y)
-num_repeat = int(X_train.shape[0]/len(states))
-states_train_unflattened = [list(itertools.repeat(st, num_repeat)) for st in states_to_consider]
+
+num_repeat = len(X[0])
+states_unflattened = [list(itertools.repeat(st, num_repeat)) for st in states_to_consider]
+# sts = []
+# for st_here in states_unflattened:
+#     sts.extend(st_here)
+
+# Randomizing before statewise merging so as to make sure no bias in the ordering of train and val generated data
+for i in range(len(X)):
+    perm = np.random.permutation(len(X[i]))
+    X[i] = X[i][perm]
+    Y[i] = Y[i][perm]
+    # states_unflattened[i] = np.array(states_unflattened[i])[perm].tolist()
+
+
+# Divide val and train and test
+frac_val = 0.7
+frac_test = 0.9
+X_train, Y_train = np.concatenate([x[:int(len(X[0]) * frac_val)] for x in X]), np.concatenate([y[:int(len(X[0]) * frac_val)] for y in Y])
 states_train = []
-for st_here in states_train_unflattened:
+for st_here in [x[:int(len(X[0]) * frac_val)] for x in states_unflattened]:
     states_train.extend(st_here)
+
+X_val, Y_val = np.concatenate([x[int(len(X[0]) * frac_val):int(len(X[0]) * frac_test)] for x in X]), np.concatenate([y[int(len(X[0]) * frac_val):int(len(X[0]) * frac_test)] for y in Y])
+states_val = []
+for st_here in [x[int(len(X[0]) * frac_val):int(len(X[0]) * frac_test)] for x in states_unflattened]:
+    states_val.extend(st_here)
+
+X_test, Y_test = np.concatenate([x[int(len(X[0]) * frac_test):] for x in X]), np.concatenate([y[int(len(X[0]) * frac_test):] for y in Y])
+states_test = []
+for st_here in [x[int(len(X[0]) * frac_test):] for x in states_unflattened]:
+    states_test.extend(st_here)
+
 
 # Shuffle data
 perm = np.random.permutation(len(X_train))
-X_train, Y_train = X_train[perm], Y_train[perm]
+X_train, Y_train, states_train = X_train[perm], Y_train[perm], np.array(states_train)[perm].tolist()
+
+perm = np.random.permutation(len(X_val))
+X_val, Y_val, states_val = X_val[perm], Y_val[perm], np.array(states_val)[perm].tolist()
+
+perm = np.random.permutation(len(X_test))
+X_test, Y_test, states_test = X_test[perm], Y_test[perm], np.array(states_test)[perm].tolist()
 
 # Reference sequences
 X_ref = raw_data[:, :, label_idx]
 
 # Divide val and train
-frac = 0.1
-X_val, Y_val, states_val = X_train[: int(len(X_train) * frac)], Y_train[: int(len(X_train) * frac)], states_train[: int(len(X_train) * frac)]
-X_train, Y_train, states_train = (
-    X_train[int(len(X_train) * frac) :],
-    Y_train[int(len(X_train) * frac) :],
-    states_train[int(len(X_train) * frac) :],
-)
+# frac = 0.1
+# X_val, Y_val, states_val = X_train[: int(len(X_train) * frac)], Y_train[: int(len(X_train) * frac)], states_train[: int(len(X_train) * frac)]
+# X_train, Y_train, states_train = (
+#     X_train[int(len(X_train) * frac) :],
+#     Y_train[int(len(X_train) * frac) :],
+#     states_train[int(len(X_train) * frac) :],
+# )
 
 def batched_compute_pcc(x, y):
     """ R computation
@@ -606,16 +639,21 @@ if options.sliding_window:
         os.makedirs(f"/nvmescratch/ssinha97/fnp_evaluations/"+disease+"_hosp_stable_predictions_slidingwindow", exist_ok=True)
         with open(f"/nvmescratch/ssinha97/fnp_evaluations/"+disease+"_hosp_stable_predictions_slidingwindow/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
             pickle.dump([Y_test_unnorm, all_labels[states_to_consider_indices], raw_data_unnorm[:,:,label_idx][states_to_consider_indices], As], f)
+        print("Saved as "+"/nvmescratch/ssinha97/fnp_evaluations/"+disease+"_hosp_stable_predictions_slidingwindow/"+str(save_model_name)+"_predictions.pkl")
     except:
         os.makedirs(f"/localscratch/ssinha97/fnp_evaluations/"+disease+"_hosp_stable_predictions_slidingwindow", exist_ok=True)
         with open(f"/localscratch/ssinha97/fnp_evaluations/"+disease+"_hosp_stable_predictions_slidingwindow/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
             pickle.dump([Y_test_unnorm, all_labels[states_to_consider_indices], raw_data_unnorm[:,:,label_idx][states_to_consider_indices], As], f)
+        print("Saved as " +"/localscratch/ssinha97/fnp_evaluations/"+disease+"_hosp_stable_predictions_slidingwindow/"+str(save_model_name)+"_predictions.pkl")
 else:
     try:
         os.makedirs(f"/nvmescratch/ssinha97/fnp_evaluations/"+disease+"_hosp_stable_predictions", exist_ok=True)
         with open(f"/nvmescratch/ssinha97/fnp_evaluations/"+disease+"_hosp_stable_predictions/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
             pickle.dump([Y_test_unnorm, all_labels[states_to_consider_indices], raw_data_unnorm[:,:,label_idx][states_to_consider_indices], As], f)
+        print("Saved as"+"/nvmescratch/ssinha97/fnp_evaluations/"+disease+"_hosp_stable_predictions/"+str(save_model_name)+"_predictions.pkl")
     except:
         os.makedirs(f"/localscratch/ssinha97/fnp_evaluations/"+disease+"_hosp_stable_predictions", exist_ok=True)
         with open(f"/localscratch/ssinha97/fnp_evaluations/"+disease+"_hosp_stable_predictions/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
             pickle.dump([Y_test_unnorm, all_labels[states_to_consider_indices], raw_data_unnorm[:,:,label_idx][states_to_consider_indices], As], f)
+        print("Saved as "+"/localscratch/ssinha97/fnp_evaluations/"+disease+"_hosp_stable_predictions/"+str(save_model_name)+"_predictions.pkl")
+        

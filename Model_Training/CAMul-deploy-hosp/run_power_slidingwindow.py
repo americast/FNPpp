@@ -11,7 +11,8 @@ parser.add_option("--stride", dest="window_stride", type="int", default=1000)
 parser.add_option("--preprocess", dest="preprocess", action="store_true", default=False)
 parser.add_option("--cnn", dest="cnn", action="store_true", default=False)
 parser.add_option("--rag", dest="rag", action="store_true", default=False)
-
+parser.add_option("--auto-size-best-num", dest="auto_size_best_num", default=None, type="int")
+parser.add_option("--seed", dest="seed", default=0, type="int")
 
 # epiweeks = list(range(202101, 202153))
 (options, args) = parser.parse_args()
@@ -107,7 +108,10 @@ for pat in patience:
         for lr_ in lr:
                 for ah in ahead:
                     to_run = []
-                    save_model = f"slidingwindow_disease_{options.disease}_weekahead_{ah}_wsize_{options.window_size}_wstride_{options.window_stride}"
+                    if options.auto_size_best_num is not None:
+                        save_model = f"slidingwindow_disease_{options.disease}_weekahead_{ah}_autosize_{options.auto_size_best_num}"
+                    else:
+                        save_model = f"slidingwindow_disease_{options.disease}_weekahead_{ah}_wsize_{options.window_size}_wstride_{options.window_stride}"
 
                     if options.preprocess:
                         save_model = f"slidingwindowpreprocessed_disease_{options.disease}_weekahead_{ah}_wsize_{options.window_size}_wstride_{options.window_stride}"
@@ -119,6 +123,11 @@ for pat in patience:
                     elif options.rag:
                         save_model = "rag_" + save_model
                         to_run = ["--rag"] + to_run
+                    if options.auto_size_best_num is not None:
+                        to_run = ["--auto-size-best-num", str(options.auto_size_best_num)] + to_run
+                    if options.seed != 0:
+                        save_model = save_model + "_seed_"+str(options.seed)
+                        to_run = to_run +["--seed", str(options.seed)]
 
                     print(f"Training {save_model}")
                     

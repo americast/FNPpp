@@ -15,6 +15,7 @@ parser.add_option("--preprocess", dest="preprocess", action="store_true", defaul
 parser.add_option("--cnn", dest="cnn", action="store_true", default=False)
 parser.add_option("--rag", dest="rag", action="store_true", default=False)
 parser.add_option("-p", "--use-pretrained", dest="use_pretrained", action="store_true", default=False)
+parser.add_option("--seed", dest="seed", default=0, type="int")
 
 
 # epiweeks = list(range(202101, 202153))
@@ -125,7 +126,9 @@ for pat in patience:
                         to_run = ["--rag"] + to_run
                     if options.auto_size_best_num is not None:
                         to_run = ["--auto-size-best-num", str(options.auto_size_best_num)] + to_run
-
+                    if options.seed != 0:
+                        save_model = save_model + "_seed_"+str(options.seed)
+                        to_run = to_run +["--seed", str(options.seed)]
                     print(f"Training {save_model}")
                     
                     to_run =  [
@@ -158,3 +161,4 @@ for pat in patience:
                     subprocess.run(
                         to_run
                     )
+                    # sys.exit(0)

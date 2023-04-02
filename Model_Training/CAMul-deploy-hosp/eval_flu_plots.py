@@ -18,6 +18,7 @@ parser.add_option("-e", "--epiweek-end", dest="epiweek_end", default="202306", t
 parser.add_option("-m", "--model_type", dest="model_type", default="normal", type="string") # normal, cnn, slidingwindow, preprocess, slidingwindow_cnn, rag, slidingwindow_rag
 parser.add_option("--size", dest="window_size", default=10, type="int")
 parser.add_option("--stride", dest="window_stride", default=10, type="int")
+parser.add_option("--seed", dest="seed", default=0, type="int")
 # parser.add_option("-f", "--files", dest="file_names", default="sliding_model_"+str(options.epiweek)+"_True_0.001_500_4", type="string")
 # parser.add_option("-f", "--files", dest="file_names", default="sliding_model_"+str(options.epiweek)+"_True_0.001_500_4", type="string")
 # parser.add_option("-s", "--state", dest="state", default="AR", type="string")
@@ -33,6 +34,8 @@ all_yts = []
 statewise_yps = [[] for state in states]
 statewise_devs = [[] for state in states]
 statewise_yts = [[] for state in states]
+
+weekwise_data = [] # list of lists of lists with each element of weekwise_data being [ahead_wise_week_yps, aheadwise_week_devs, aheadwise_week_yts]
 
 if "2023" in options.epiweek_end:
     epiweeks = list(range(int(options.epiweek_start), 202252)) + list(range(202301, int(options.epiweek_end)))
@@ -202,11 +205,28 @@ for epiweek in tqdm(epiweeks):
     # counter = -1
     for ah in week_ahead:
         if "preprocess" in options.model_type or "slidingwindow" in options.model_type:
-            with open(file_initials+str(ah)+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)+"_predictions.pkl", "rb") as f:
-                data_pickle = pickle.load(f)
+            if "autosize" in options.model_type:
+                file_to_load = file_initials+str(ah)+"_autosize_"+str(options.model_type[-1])
+            else:
+                file_to_load = file_initials+str(ah)+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)
         else:
-            with open(file_initials+str(ah)+"_predictions.pkl", "rb") as f:
+            file_to_load = file_initials+str(ah)
+
+        if options.seed != 0:
+            file_to_load = file_to_load+"_seed_"+str(options.seed)
+
+        file_to_load = file_to_load + "_predictions.pkl"
+        try:
+            with open(file_to_load, "rb") as f:
                 data_pickle = pickle.load(f)
+        except:
+            try:
+                with open("/localscratch/ssinha97/fnp_evaluations/"+file_to_load, "rb") as f:
+                    data_pickle = pickle.load(f)
+            except:
+                with open("/nvmescratch/ssinha97/fnp_evaluations/"+file_to_load, "rb") as f:
+                    data_pickle = pickle.load(f)
+
 
         for st, state in enumerate(states):
             if ah == 1:
@@ -224,14 +244,20 @@ for epiweek in tqdm(epiweeks):
         
         heat_map_means[ah] = np.mean(data_pickle[3], axis=0)
         heat_map_stds[ah] = np.std(data_pickle[3], axis=0)
+        # this_ah_yp = []
+        # this_ah_dev = []
+        # this_ah_yt = []
 
     # for ah in week_ahead:
     #     for state in states:
     #         heat_map_means[ah].append(plot_dict[state][3][ah - 1])
     #     heat_map_stds[ah] = np.std(heat_map_means[ah], axis=0)
     #     pu.db
-
+    ahead_wise_yps = [[] for ah in week_ahead]
+    ahead_wise_devs = [[] for ah in week_ahead]
+    ahead_wise_yts = [[] for ah in week_ahead]
     #plots
+
     for st, state in enumerate(states):
         plt.figure(plot_count)
         plot_count += 1
@@ -250,7 +276,10 @@ for epiweek in tqdm(epiweeks):
         statewise_yps[st].extend(yp[-len(week_ahead):])
         statewise_devs[st].extend(dev[-len(week_ahead):])
         statewise_yts[st].extend(yt[-len(week_ahead):])
-
+        for ah in week_ahead:
+            ahead_wise_yps[ah - 1].append(yp_here[ah - 1])
+            ahead_wise_devs[ah - 1].append(dev_here[ah - 1])
+            ahead_wise_yts[ah - 1].append(yt_here[ah - 1])
         all_yps.extend(yp_here.tolist())
         all_devs.extend(dev_here.tolist())
         all_yts.extend(yt_here.tolist())
@@ -263,6 +292,7 @@ for epiweek in tqdm(epiweeks):
 
         txt = str(state)+" "+str(epiweek)+"\nRMSE: "+str(rmse_here)+"\nCRPS: "+str(crps_here)+"\nCS: "+str(cs_here)
         plt.figtext(0.5, 0.0, txt, wrap=True, va="top", ha="center", fontsize=12)
+
 
 
 
@@ -280,8 +310,16 @@ for epiweek in tqdm(epiweeks):
                 plot_name = plot_name + "_rag"
             elif "preprocess" in options.model_type:
                 plot_name = plot_name+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)+"_preprocessed"
-            else:
+            else:           
                 plot_name = f"plots_flu/"+str(state)+"_"+str(epiweek)+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)
+
+        if "autosize" in options.model_type:
+            plot_name = plot_name.split("_")[0]+str(epiweek)+"_autosize_"+str(options.model_type[-1])
+            if "rag" in options.model_type:
+                plot_name = plot_name+"_rag"
+            if "cnn" in options.model_type:
+                plot_name = plot_name+"_cnn"
+
         
         plot_name = plot_name + ".png"
         # pu.db
@@ -310,6 +348,7 @@ for epiweek in tqdm(epiweeks):
             plt.savefig(f"plots_"+file_initials.split("_")[0]+"/heatmap_"+str(ah)+"_rag.png")
         else:
             plt.savefig(f"plots_"+file_initials.split("_")[0]+"/heatmap_"+str(ah)+".png")
+    weekwise_data.append([ahead_wise_yps, ahead_wise_devs, ahead_wise_yts])
 
 all_rmse   = rmse(np.array(all_yps), np.array(all_yts))
 all_nrmse  = nrmse(np.array(all_yps), np.array(all_yts))
@@ -342,12 +381,135 @@ for st, state in enumerate(states):
     txt_all = txt_all + txt_here
 
 if "preprocess" in options.model_type or "slidingwindow" in options.model_type:
-    file_initials = file_initials+str(ah)+"_wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)+"_"
+    if "autosize" in options.model_type:
+        file_initials = file_initials+"_autosize_"+str(options.model_type[-1])
+    else:
+        file_initials = file_initials+"wsize_"+str(options.window_size)+"_wstride_"+str(options.window_stride)+"_"
+
+if options.seed != 0:
+    file_initials = file_initials + "_seed_"+str(options.seed)
+
+epiweek_rmses = {}
+epiweek_nrmses = {}
+epiweek_crpss = {}
+epiweek_css = {}
+
+rmse_all_states = [[] for x in states]
+nrmse_all_states = [[] for x in states]
+crps_all_states = [[] for x in states]
+cs_all_states = [[] for x in states]
+
+for e, epiweek in enumerate(epiweeks):
+    # print(e)
+    this_week_data = weekwise_data[e]
+    this_week_rmses = []
+    this_week_nrmses = []
+    this_week_crpss = []
+    this_week_css = []
+
+    
+    # all_states_this_week_rmse = []
+    # all_states_this_week_nrmse = []
+    # all_states_this_week_crps = []
+    # all_states_this_week_cs = []
+    for st, state in enumerate(states):
+        yp_this_state = [this_week_data[0][x - 1][st] for x in week_ahead]
+        dev_this_state = [this_week_data[1][x - 1][st] for x in week_ahead]
+        yt_this_state = [this_week_data[2][x - 1][st] for x in week_ahead]
+
+        rmse_this_state   = rmse(np.array(yp_this_state), np.array(yt_this_state))
+        nrmse_this_state  = nrmse(np.array(yp_this_state), np.array(yt_this_state))
+        # mape_this_state   = mape(np.array(yp_this_state), np.array(yt_this_state))
+        crps_this_state   = crps_samples(np.array(yp_this_state), np.array(yt_this_state))
+        cs_this_state     = get_pr(np.array(yp_this_state), np.array(dev_this_state)**2, np.array(yt_this_state))[1]
+
+        rmse_all_states[st].append(rmse_this_state)
+        nrmse_all_states[st].append(nrmse_this_state)
+        crps_all_states[st].append(crps_this_state)
+        cs_all_states[st].append(cs_this_state)
+
+
+
+
+
+
+    for ah in week_ahead:
+        yp_here = this_week_data[0][ah-1]
+        dev_here = this_week_data[1][ah-1]
+        yt_here = this_week_data[2][ah-1]
+
+        rmse_here   = rmse(np.array(yp_here), np.array(yt_here))
+        # if rmse_here > 80:
+        #     pu.db
+        this_week_rmses.append(rmse_here)
+        nrmse_here  = nrmse(np.array(yp_here), np.array(yt_here))
+        this_week_nrmses.append(nrmse_here)
+        # mape_here   = mape(np.array(yp_here), np.array(yt_here))
+        crps_here   = crps_samples(np.array(yp_here), np.array(yt_here))
+        this_week_crpss.append(crps_here)
+        cs_here     = get_pr(np.array(yp_here), np.array(dev_here)**2, yt_here)[1]
+        this_week_css.append(cs_here)
+    epiweek_rmses[epiweek] = np.mean(this_week_rmses)
+    epiweek_nrmses[epiweek] = np.mean(this_week_nrmses)
+    epiweek_crpss[epiweek] = np.mean(this_week_crpss)
+    epiweek_css[epiweek] = np.mean(this_week_css)
+
+# txt += "\nepiweek_rmses: \n"+str(epiweek_rmses)
+# txt += "\nepiweek_nrmses: \n"+str(epiweek_nrmses)
+# txt += "\nepiweek_crpss: \n"+str(epiweek_crpss)
+# txt += "\nepiweek_css: \n"+str(epiweek_css)
+
+rmses_to_mean = []
+nrmses_to_mean = []
+crpss_to_mean = []
+css_to_mean = []
+for week in epiweek_rmses:
+    rmses_to_mean.append(epiweek_rmses[week])
+    nrmses_to_mean.append(epiweek_nrmses[week])
+    crpss_to_mean.append(epiweek_crpss[week])
+    css_to_mean.append(epiweek_css[week])
+
+rmse_mean = np.mean(rmses_to_mean)
+nrmse_mean = np.mean(nrmses_to_mean)
+crps_mean = np.mean(crpss_to_mean)
+cs_mean = np.mean(css_to_mean)
+
+rmse_all_states_means = [np.mean(x) for x in rmse_all_states]
+nrmse_all_states_means = [np.mean(x) for x in nrmse_all_states]
+crps_all_states_means = [np.mean(x) for x in crps_all_states]
+cs_all_states_means = [np.mean(x) for x in cs_all_states]
+
+txt_all += "\n\nMean computed results: \n"
+print("\n\nMean computed results: \n")
+for st, state in enumerate(states):
+    txt_all = txt_all + \
+    "\n"+state+"\n"+ \
+    "rmse_all_states_means: "+str(rmse_all_states_means[st])+"\n"+\
+    "nrmse_all_states_means: "+str(nrmse_all_states_means[st])+"\n"+\
+    "crps_all_states_means: "+str(crps_all_states_means[st])+"\n"+\
+    "cs_all_states_means: "+str(cs_all_states_means[st])+"\n"+\
+    "\n"
+
+
+print("rmse_mean: "+str(np.mean(rmse_all_states_means)))
+print("nrmse_mean: "+str(np.mean(nrmse_all_states_means)))
+print("crps_mean: "+str(np.mean(crps_all_states_means)))
+print("cs_mean: "+str(np.mean(cs_all_states_means)))
+
+txt_all += "\nmean_rmses: \n"+str(np.mean(rmse_all_states_means))
+txt_all += "\nmean_nrmses: \n"+str(np.mean(nrmse_all_states_means))
+txt_all += "\nmean_crpss: \n"+str(np.mean(crps_all_states_means))
+txt_all += "\nmean_css: \n"+str(np.mean(cs_all_states_means))
+
 
 f = open("plots_flu/"+file_initials.split("/")[1]+"results.txt", "w")
 f.write(txt_all)
 f.close()
+print("\nSaved as: "+"plots_flu/"+file_initials.split("/")[1]+"results.txt")
 
+f = open("plots_flu/"+file_initials.split("/")[1]+"plainvalues.pkl","wb")
+pickle.dump([all_yps, all_yts],f)
+f.close()
 
 sys.exit(0)
 """

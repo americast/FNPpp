@@ -8,6 +8,7 @@ parser.add_option("--epiweek_start", dest="epiweek_start", default="202232", typ
 parser.add_option("--epiweek_end", dest="epiweek_end", default="202310", type="string")
 parser.add_option("-d", "--disease", dest="disease", default="flu", type="string")
 parser.add_option("--epochs", dest="epochs", default=300, type="int")
+parser.add_option("--seed", dest="seed", default=0, type="int")
 parser.add_option("--cnn", dest="cnn", action="store_true", default=False)
 parser.add_option("--rag", dest="rag", action="store_true", default=False)
 
@@ -78,13 +79,13 @@ states = [
     "X",
 ]
 
-subprocess.run(
-        [
-            "bash",
-            "./scripts/hosp_preprocess.sh",
-            options.epiweek_end,
-        ]
-    )
+# subprocess.run(
+#         [
+#             "bash",
+#             "./scripts/hosp_preprocess.sh",
+#             options.epiweek_end,
+#         ]
+#     )
 
 # if options.epiweek is not None and int(options.epiweek)> 202153:
 #     subprocess.run(
@@ -118,61 +119,25 @@ for pat in patience:
         for lr_ in lr:
             for week in tqdm(epiweeks):
                 for ah in ahead:
+                    save_model = "disease_"+str(options.disease)+"_epiweek_"+str(week)+"_weekahead_"+str(ah)
+                    to_run = []
+                    
                     if options.cnn:
-                        save_model = f"cnn_disease_{options.disease}_epiweek_{week}_weekahead_{ah}"
-                        print(f"Training {save_model}")
-                        subprocess.run(
-                            [
-                                "python",
-                                "train_hosp_revised_refsetsupdated.py",
-                                "--epiweek",
-                                str(week),
-                                "--lr",
-                                str(lr_),
-                                "--save",
-                                save_model,
-                                "--epochs",
-                                str(options.epochs),
-                                "--patience",
-                                str(pat),
-                                "-d",
-                                str(ah),
-                                "--tb",
-                                "--disease",
-                                "flu",
-                                "--cnn",
-                            ]
-                        )
+                        save_model = "cnn_"+save_model
+                        to_run = to_run +["--cnn"]
+
                     elif options.rag:
-                        save_model = f"rag_disease_{options.disease}_epiweek_{week}_weekahead_{ah}"
-                        print(f"Training {save_model}")
-                        subprocess.run(
-                            [
-                                "python",
-                                "train_hosp_revised_refsetsupdated.py",
-                                "--epiweek",
-                                str(week),
-                                "--lr",
-                                str(lr_),
-                                "--save",
-                                save_model,
-                                "--epochs",
-                                str(options.epochs),
-                                "--patience",
-                                str(pat),
-                                "-d",
-                                str(ah),
-                                "--tb",
-                                "--disease",
-                                "flu",
-                                "--rag",
-                            ]
-                        )
+                        save_model = "rag_"+save_model
+                        to_run = to_run +["--rag"]
+
                     else:
-                        save_model = f"normal_disease_{options.disease}_epiweek_{week}_weekahead_{ah}"
-                        print(f"Training {save_model}")
-                        subprocess.run(
-                            [
+                        save_model = "normal_"+save_model
+
+                    if options.seed != 0:
+                        save_model = save_model + "_seed_"+str(options.seed)
+                        to_run = to_run +["--seed", str(options.seed)]
+
+                    to_run = [
                                 "python",
                                 "train_hosp_revised_refsetsupdated.py",
                                 "--epiweek",
@@ -190,5 +155,8 @@ for pat in patience:
                                 "--tb",
                                 "--disease",
                                 "flu",
-                            ]
-                        )
+                        ] + to_run
+                    print(f"Training {save_model}")
+                    subprocess.run(
+                        to_run
+                    )
