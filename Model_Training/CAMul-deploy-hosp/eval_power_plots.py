@@ -196,8 +196,12 @@ for ah in tqdm(week_ahead):
 
     file_to_load = file_to_load + "_predictions.pkl"
 
-    with open(file_to_load, "rb") as f:
-        data_pickle = pickle.load(f)
+    try:
+        with open(file_to_load, "rb") as f:
+            data_pickle = pickle.load(f)
+    except:
+        with open("/localscratch/ssinha97/fnp_evaluations/"+file_to_load, "rb") as f:
+            data_pickle = pickle.load(f)
     # else:
     #     with open(file_initials+str(ah)+"_predictions.pkl", "rb") as f:
     #         data_pickle = pickle.load(f)

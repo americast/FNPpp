@@ -22,12 +22,13 @@ from models.multimodels import (
 from models.fnpmodels import RegressionFNP2
 from tqdm import tqdm
 from itertools import product
+from transformers import BertModel, BertConfig, BertTokenizer, pipeline, get_scheduler, BertForSequenceClassification, InformerConfig, InformerModel
 
 parser = OptionParser()
 parser.add_option("-p", "--epiweek_pres", dest="epiweek_pres", default="202310", type="string")
 parser.add_option("-e", "--epiweek", dest="epiweek", default="202232", type="string")
 parser.add_option("--epochs", dest="epochs", default=3500, type="int")
-parser.add_option("--lr", dest="lr", default=1e-3, type="float")
+parser.add_option("--lr", dest="lr", default=6e-4, type="float")
 parser.add_option("--patience", dest="patience", default=1000, type="int")
 parser.add_option("-d", "--day", dest="day_ahead", default=1, type="int")
 parser.add_option("-s", "--seed", dest="seed", default=0, type="int")
@@ -45,6 +46,8 @@ parser.add_option("--disease", dest="disease", type="string", default="covid")
 parser.add_option("--preprocess", dest="preprocess", action="store_true", default=False)
 parser.add_option("--cnn", dest="cnn", action="store_true", default=False)
 parser.add_option("--rag", dest="rag", action="store_true", default=False)
+parser.add_option("--nn", dest="nn", default="none", type="choice", choices=["none", "simple", "bn", "dot", "bert"])
+parser.add_option("--bert-emb", dest="bert_emb", action="store_true", default=False)
 
 (options, args) = parser.parse_args()
 epiweek_pres = options.epiweek_pres
@@ -69,6 +72,8 @@ if options.cnn:
     disease = disease + "_cnn"
 if options.rag:
     disease = disease + "_rag"
+if options.nn != "none":
+    disease = disease + "_nn-" + options.nn
 # First do sequence alone
 # Then add exo features
 # Then TOD (as feature, as view)
@@ -163,11 +168,16 @@ def diff_epiweeks(epiweek1, epiweek2):
     year1, week1 = int(epiweek1[:4]), int(epiweek1[4:])
     year2, week2 = int(epiweek2[:4]), int(epiweek2[4:])
     return (year1 - year2) * 52 + week1 - week2
-
+# pu.db
+raw_data_weeks = list(range(-raw_data[0].shape[0], 0))
+raw_data_weeks = [raw_data_weeks for x in range(51)]
 if diff_epiweeks(epiweek, epiweek_pres) > 0:
     raw_data = np.array(raw_data)[:, :-5 + day_ahead, :]
+    raw_data_weeks = np.array(raw_data_weeks)[:, :-5 + day_ahead]
 else:    
     raw_data = np.array(raw_data)[:, :diff_epiweeks(epiweek, epiweek_pres) + day_ahead, :]  # states x days x featureslabel_idx = include_cols.index("cdc_hospitalized")
+    raw_data_weeks = np.array(raw_data_weeks)[:, :diff_epiweeks(epiweek, epiweek_pres) + day_ahead]
+
 if options.disease == "flu":
     label_idx = include_cols.index("cdc_flu_hosp")
 else:
@@ -176,6 +186,7 @@ all_labels = raw_data[:, -1, label_idx]
 print(f"Diff epiweeks: {diff_epiweeks(epiweek, epiweek_pres)}")
 # pu.db
 raw_data = raw_data[:, start_day:-day_ahead, :]
+raw_data_weeks = raw_data_weeks[:, start_day:-day_ahead]
 
 raw_data_unnorm = raw_data.copy()
 
@@ -234,11 +245,27 @@ def prefix_sequences(seq, day_ahead=day_ahead):
         Y[i] = seq[i + day_ahead, label_idx]
     return X, Y
 
+def prefix_sequences_weeks(seq, day_ahead=day_ahead):
+    """
+    Prefix sequences with zeros
+    """
+    l = len(seq)
+    # try:
+    X = np.zeros((l - day_ahead, l))
+    # except:
+    #     pu.db
+    for i in range(l - day_ahead):
+        X[i, (l - i - 1) :] = seq[: i + 1]
+    return X
+
 X, Y = [], []
+X_weeks = []
 for i, st in enumerate(states):
     if st in states_to_consider:
         x, y = prefix_sequences(raw_data[i])
+        x_weeks = prefix_sequences_weeks(raw_data_weeks[i])
         X.append(x)
+        X_weeks.append(x_weeks)
         Y.append(y)
 
 num_repeat = len(X[0])
@@ -251,6 +278,7 @@ states_unflattened = [list(itertools.repeat(st, num_repeat)) for st in states_to
 for i in range(len(X)):
     perm = np.random.permutation(len(X[i]))
     X[i] = X[i][perm]
+    X_weeks[i] = X_weeks[i][perm]
     Y[i] = Y[i][perm]
     # states_unflattened[i] = np.array(states_unflattened[i])[perm].tolist()
 
@@ -258,17 +286,17 @@ for i in range(len(X)):
 # Divide val and train and test
 frac_val = 0.7
 frac_test = 0.9
-X_train, Y_train = np.concatenate([x[:int(len(X[0]) * frac_val)] for x in X]), np.concatenate([y[:int(len(X[0]) * frac_val)] for y in Y])
+X_train, X_train_weeks, Y_train = np.concatenate([x[:int(len(X[0]) * frac_val)] for x in X]), np.concatenate([x_weeks[:int(len(X_weeks[0]) * frac_val)] for x_weeks in X_weeks]), np.concatenate([y[:int(len(X[0]) * frac_val)] for y in Y])
 states_train = []
 for st_here in [x[:int(len(X[0]) * frac_val)] for x in states_unflattened]:
     states_train.extend(st_here)
 
-X_val, Y_val = np.concatenate([x[int(len(X[0]) * frac_val):int(len(X[0]) * frac_test)] for x in X]), np.concatenate([y[int(len(X[0]) * frac_val):int(len(X[0]) * frac_test)] for y in Y])
+X_val, X_val_weeks, Y_val = np.concatenate([x[int(len(X[0]) * frac_val):int(len(X[0]) * frac_test)] for x in X]), np.concatenate([x_weeks[int(len(X_weeks[0]) * frac_val):int(len(X_weeks[0]) * frac_test)] for x_weeks in X_weeks]), np.concatenate([y[int(len(X[0]) * frac_val):int(len(X[0]) * frac_test)] for y in Y])
 states_val = []
 for st_here in [x[int(len(X[0]) * frac_val):int(len(X[0]) * frac_test)] for x in states_unflattened]:
     states_val.extend(st_here)
 
-X_test, Y_test = np.concatenate([x[int(len(X[0]) * frac_test):] for x in X]), np.concatenate([y[int(len(X[0]) * frac_test):] for y in Y])
+X_test, X_test_weeks, Y_test = np.concatenate([x[int(len(X[0]) * frac_test):] for x in X]), np.concatenate([x_weeks[int(len(X_weeks[0]) * frac_test):] for x_weeks in X_weeks]), np.concatenate([y[int(len(X[0]) * frac_test):] for y in Y])
 states_test = []
 for st_here in [x[int(len(X[0]) * frac_test):] for x in states_unflattened]:
     states_test.extend(st_here)
@@ -276,13 +304,13 @@ for st_here in [x[int(len(X[0]) * frac_test):] for x in states_unflattened]:
 
 # Shuffle data
 perm = np.random.permutation(len(X_train))
-X_train, Y_train, states_train = X_train[perm], Y_train[perm], np.array(states_train)[perm].tolist()
+X_train, X_train_weeks, Y_train, states_train = X_train[perm], X_train_weeks[perm], Y_train[perm], np.array(states_train)[perm].tolist()
 
 perm = np.random.permutation(len(X_val))
-X_val, Y_val, states_val = X_val[perm], Y_val[perm], np.array(states_val)[perm].tolist()
+X_val, X_val_weeks, Y_val, states_val = X_val[perm], X_val_weeks[perm], Y_val[perm], np.array(states_val)[perm].tolist()
 
 perm = np.random.permutation(len(X_test))
-X_test, Y_test, states_test = X_test[perm], Y_test[perm], np.array(states_test)[perm].tolist()
+X_test, X_test_weeks, Y_test, states_test = X_test[perm], X_test_weeks[perm], Y_test[perm], np.array(states_test)[perm].tolist()
 
 # Reference sequences
 X_ref = raw_data[:, :, label_idx]
@@ -372,23 +400,54 @@ if options.sliding_window:
 
 
 # Build model
-feat_enc = GRUEncoder(in_size=len(include_cols), out_dim=60,).to(device)
-seq_enc = GRUEncoder(in_size=1, out_dim=60,).to(device)
-fnp_enc = RegressionFNP2(
-    dim_x=60,
-    dim_y=1,
-    dim_h=100,
-    size_ref=X_ref.shape[0],
-    n_layers=3,
-    num_M=batch_size,
-    dim_u=60,
-    dim_z=60,
-    use_DAG=False,
-    use_ref_labels=False,
-    add_atten=False,
-    cnn=options.cnn,
-    rag=options.rag,
-).to(device)
+if options.bert_emb:
+    # My method
+    # feat_enc_linear = torch.nn.Linear(len(include_cols), 768).to(device)
+    # seq_enc_linear = torch.nn.Linear(1, 768).to(device)
+    
+    configuration = InformerConfig(prediction_length=4, num_time_features=1, input_size=1, context_length=raw_data.shape[1], lags_sequence=[0])
+    seq_enc = InformerModel(configuration).to(device)
+    configuration = InformerConfig(prediction_length=4, num_time_features=1, input_size=len(include_cols), context_length=raw_data.shape[1], lags_sequence=[0])
+    feat_enc = InformerModel(configuration).to(device)
+else:
+    # Original method
+    feat_enc = GRUEncoder(in_size=len(include_cols), out_dim=60,).to(device)
+    seq_enc = GRUEncoder(in_size=1, out_dim=60,).to(device)
+
+if options.bert_emb:
+    fnp_enc = RegressionFNP2(
+        dim_x=64,
+        dim_y=1,
+        dim_h=100,
+        size_ref=X_ref.shape[0],
+        n_layers=3,
+        num_M=batch_size,
+        dim_u=64,
+        dim_z=64,
+        use_DAG=False,
+        use_ref_labels=False,
+        add_atten=False,
+        cnn=options.cnn,
+        rag=options.rag,
+        nn_A=options.nn
+    ).to(device)
+else:
+    fnp_enc = RegressionFNP2(
+        dim_x=60,
+        dim_y=1,
+        dim_h=100,
+        size_ref=X_ref.shape[0],
+        n_layers=3,
+        num_M=batch_size,
+        dim_u=60,
+        dim_z=60,
+        use_DAG=False,
+        use_ref_labels=False,
+        add_atten=False,
+        cnn=options.cnn,
+        rag=options.rag,
+        nn_A=options.nn
+    ).to(device)
 
 
 def load_model(folder, file=save_model_name):
@@ -430,10 +489,28 @@ class SeqData(torch.utils.data.Dataset):
             float_tensor(self.Y[idx]),
         )
 
+# Build dataset
+class SeqDataWithWeeks(torch.utils.data.Dataset):
+    def __init__(self, X, X_weeks, Y):
+        self.X = X
+        self.X_weeks = X_weeks
+        self.Y = Y[:, None]
+
+    def __len__(self):
+        return self.X.shape[0]
+
+    def __getitem__(self, idx):
+        return (
+            float_tensor(self.X[idx, :, :]),
+            float_tensor(self.X_weeks[idx, :]),
+            float_tensor(self.Y[idx]),
+        )
+
 # Build dataset with state info
 class SeqDataWithStates(torch.utils.data.Dataset):
-    def __init__(self, X, Y, states):
+    def __init__(self, X, X_weeks, Y, states):
         self.X = X
+        self.X_weeks = X_weeks
         self.Y = Y[:, None]
         self.states = states
 
@@ -444,15 +521,16 @@ class SeqDataWithStates(torch.utils.data.Dataset):
         try:
             return (
                 float_tensor(self.X[idx, :, :]),
+                float_tensor(self.X_weeks[idx, :]),
                 float_tensor(self.Y[idx]),
                 self.states[idx],
             )
         except:
             pu.db
 
-train_dataset = SeqData(X_train, Y_train)
-val_dataset = SeqData(X_val, Y_val)
-val_dataset_with_states = SeqDataWithStates(X_val, Y_val, states_val)
+train_dataset = SeqDataWithWeeks(X_train, X_train_weeks, Y_train)
+val_dataset = SeqDataWithWeeks(X_val, X_val_weeks, Y_val)
+val_dataset_with_states = SeqDataWithStates(X_val, X_val_weeks, Y_val, states_val)
 train_loader = torch.utils.data.DataLoader(
     train_dataset, batch_size=batch_size, shuffle=True
 )
@@ -467,13 +545,46 @@ if start_model != "None":
     print("Loaded model from", start_model)
 
     
+if options.bert_emb:
+    # My method
+    opt_bert = torch.optim.AdamW(
+        list(seq_enc.parameters())
+        + list(feat_enc.parameters()),
+        lr=6e-4,betas=(0.9, 0.95), weight_decay=1e-1
+    )
+    
+    opt = torch.optim.Adam(
+        list(fnp_enc.parameters()),
+        lr=lr,
+    )
+elif options.rag:
+    all_params = list(fnp_enc.named_parameters())
+    fnp_enc_params_nobert = [list(fnp_enc.parameters())[i] for i, x in enumerate(all_params) if "bert" not in x[0]]
+    fnp_enc_params_bert = [list(fnp_enc.parameters())[i] for i, x in enumerate(all_params) if "bert" in x[0]]
 
-opt = torch.optim.Adam(
-    list(seq_enc.parameters())
-    + list(feat_enc.parameters())
-    + list(fnp_enc.parameters()),
-    lr=lr,
-)
+    opt_bert = torch.optim.AdamW(
+        fnp_enc_params_bert,
+        lr=lr,betas=(0.9, 0.95), weight_decay=1e-1
+    )
+    num_training_steps = epochs * len(train_loader)
+    lr_scheduler = get_scheduler(
+      name="linear", optimizer=opt_bert, num_warmup_steps=0, num_training_steps=num_training_steps)
+    
+    opt = torch.optim.Adam(
+        list(seq_enc.parameters())
+        + list(feat_enc.parameters())
+        + fnp_enc_params_nobert,
+        lr=lr,
+    )
+else:
+    # Original method
+    opt = torch.optim.Adam(
+        list(seq_enc.parameters())
+        + list(feat_enc.parameters())
+        + list(fnp_enc.parameters()),
+        lr=lr,
+    )
+
 
 
 def train_step(data_loader, X, Y, X_ref):
@@ -487,14 +598,34 @@ def train_step(data_loader, X, Y, X_ref):
     train_err = 0.0
     YP = []
     T_target = []
-    for i, (x, y) in enumerate(data_loader):
+    for i, (x, x_weeks, y) in enumerate(data_loader):
         opt.zero_grad()
-        x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
-        x_feat = feat_enc(x)
+        if options.bert_emb or options.rag:
+            opt_bert.zero_grad()
+        if options.bert_emb:
+            # My method
+            inp = float_tensor(X_ref).unsqueeze(2)
+            mask = float_tensor(torch.ones_like(inp))
+            x_seq = seq_enc(past_values=inp[:,:,-1], past_time_features=float_tensor(raw_data_weeks).unsqueeze(2), past_observed_mask=mask[:,:,-1]).encoder_last_hidden_state[:,-1,:]
+            
+            inp = float_tensor(x)
+            mask = float_tensor(torch.ones_like(inp))
+            x_feat = feat_enc(past_values=inp,past_time_features=float_tensor(x_weeks).unsqueeze(2), past_observed_mask=mask).encoder_last_hidden_state[:,-1,:] # Final dimension is [128, 64]
+            
+        else:
+            # Original method
+            x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2)) # Converts [51,119 (,1)] to [51, 60]
+            x_feat = feat_enc(float_tensor(x)) # Converts [128, 119, 5] to [128, 60]
+
+
+        # pu.db
         loss, yp, _ = fnp_enc(x_seq, float_tensor(X_ref), x_feat, y)
         yp = yp[X_ref.shape[0] :]
         loss.backward()
         opt.step()
+        if options.bert_emb or options.rag:
+            opt_bert.step()
+            # lr_scheduler.step()
         YP.append(yp.detach().cpu().numpy())
         T_target.append(y.detach().cpu().numpy())
         total_loss += loss.detach().cpu().numpy()
@@ -518,15 +649,29 @@ def val_step(data_loader, X, Y, X_ref, sample=True):
         val_err = 0.0
         YP = []
         T_target = []
-        for i, (x, y) in enumerate(data_loader):
-            x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
-            x_feat = feat_enc(x)
-            yp, _, vars, _, _, _, _ = fnp_enc.predict(
+        all_As = []
+        for i, (x, x_weeks, y) in enumerate(data_loader):
+            if options.bert_emb:
+                # My method
+                inp = float_tensor(X_ref).unsqueeze(2)
+                mask = float_tensor(torch.ones_like(inp))
+                x_seq = seq_enc(past_values=inp[:,:,-1], past_time_features=float_tensor(raw_data_weeks).unsqueeze(2), past_observed_mask=mask[:,:,-1]).encoder_last_hidden_state[:,-1,:]
+                
+                inp = float_tensor(x)
+                mask = float_tensor(torch.ones_like(inp))
+                x_feat = feat_enc(past_values=inp,past_time_features=float_tensor(x_weeks).unsqueeze(2), past_observed_mask=mask).encoder_last_hidden_state[:,-1,:] # Final dimension is [128, 64]
+            else:
+                x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
+                x_feat = feat_enc(float_tensor(x))
+
+            yp, _, vars, _, _, _, A = fnp_enc.predict(
                 x_feat, x_seq, float_tensor(X_ref), sample
             )
             val_err += torch.pow(yp - y, 2).mean().sqrt().detach().cpu().numpy()
             YP.append(yp.detach().cpu().numpy())
             T_target.append(y.detach().cpu().numpy())
+
+            all_As = [] 
         return val_err / (i + 1), np.array(YP).ravel(), np.array(T_target).ravel()
 
 def val_step_with_states(data_loader, X, Y, X_ref, sample=True):
@@ -542,24 +687,37 @@ def val_step_with_states(data_loader, X, Y, X_ref, sample=True):
         T_target = []
         states_here = []
         all_vars = []
-        for i, (x, y, st) in enumerate(data_loader):
-            x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
-            x_feat = feat_enc(x)
-            yp, _, vars, _, _, _, _ = fnp_enc.predict(
+        all_As = []
+        for i, (x, x_weeks, y, st) in enumerate(data_loader):
+            if options.bert_emb:
+                # My method
+                inp = float_tensor(X_ref).unsqueeze(2)
+                mask = float_tensor(torch.ones_like(inp))
+                x_seq = seq_enc(past_values=inp[:,:,-1], past_time_features=float_tensor(raw_data_weeks).unsqueeze(2), past_observed_mask=mask[:,:,-1]).encoder_last_hidden_state[:,-1,:]
+                
+                inp = float_tensor(x)
+                mask = float_tensor(torch.ones_like(inp))
+                x_feat = feat_enc(past_values=inp,past_time_features=float_tensor(x_weeks).unsqueeze(2), past_observed_mask=mask).encoder_last_hidden_state[:,-1,:] # Final dimension is [128, 64]
+            else:
+                x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
+                x_feat = feat_enc(float_tensor(x))
+
+            yp, _, vars, _, _, _, A = fnp_enc.predict(
                 x_feat, x_seq, float_tensor(X_ref), sample
             )
             val_err += torch.pow(yp - y, 2).mean().sqrt().detach().cpu().numpy()
             YP.extend(yp.detach().cpu().numpy().tolist())
             T_target.extend(y.detach().cpu().numpy().tolist())
             all_vars.extend(vars.detach().cpu().numpy().tolist())
+            all_As.append(A.cpu().numpy())
             states_here.extend(st)
         YP = [x[0] for x in YP]
         T_target = [x[0] for x in T_target]
         all_vars = [x[0] for x in all_vars]
-        return val_err / (i + 1), np.array(YP, dtype=object).ravel(), np.array(T_target).ravel(), states_here, all_vars
+        return val_err / (i + 1), np.array(YP, dtype=object).ravel(), np.array(T_target).ravel(), states_here, all_vars, all_As
 
 
-def test_step(X, X_ref, samples=1000):
+def test_step(X, X_test_weeks, X_ref, samples=1000):
     """
     Test step
     """
@@ -570,8 +728,19 @@ def test_step(X, X_ref, samples=1000):
         YP = []
         As = []
         for i in tqdm(range(samples)):
-            x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
-            x_feat = feat_enc(float_tensor(X))
+            if options.bert_emb:
+                # My method
+                inp = float_tensor(X_ref).unsqueeze(2)
+                mask = float_tensor(torch.ones_like(inp))
+                x_seq = seq_enc(past_values=inp[:,:,-1], past_time_features=float_tensor(raw_data_weeks).unsqueeze(2), past_observed_mask=mask[:,:,-1]).encoder_last_hidden_state[:,-1,:]
+                
+                inp = float_tensor(X)
+                mask = float_tensor(torch.ones_like(inp))
+                x_feat = feat_enc(past_values=inp,past_time_features=float_tensor(X_test_weeks).unsqueeze(2), past_observed_mask=mask).encoder_last_hidden_state[:,-1,:] # Final dimension is [128, 64]
+            else:
+                x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
+                x_feat = feat_enc(float_tensor(X))
+        
             yp, _, vars, _, _, _, A = fnp_enc.predict(
                 x_feat, x_seq, float_tensor(X_ref), sample=False
             )
@@ -591,12 +760,14 @@ for ep in range(epochs):
     if options.auto_size_best_num is not None:
         print("Auto num: "+str(options.auto_size_best_num))
         print("Window size: "+str(ilk))
+    if options.seed != 0:
+        print("seed: "+str(options.seed))
     print("---------------------------------------")
     train_loss, train_err, yp, yt = train_step(train_loader, X_train, Y_train, X_ref)
     print(f"Train loss: {train_loss:.4f}, Train err: {train_err:.4f}")
-    val_err, yp, yt, st, vars = val_step_with_states(val_loader_with_states, X_val, Y_val, X_ref)
+    val_err, yp, yt, st, vars, As = val_step_with_states(val_loader_with_states, X_val, Y_val, X_ref)
     print(f"Val err: {val_err:.4f}")
-    all_results[ep] = {"pred": yp, "gt": yt, "states": st, "vars": vars}
+    all_results[ep] = {"pred": yp, "gt": yt, "states": st, "vars": vars, "As": As}
     if options.tb:
         writer.add_scalar('Train/RMSE', train_err, ep)
         writer.add_scalar('Train/loss', train_loss, ep)
@@ -615,13 +786,16 @@ for ep in range(epochs):
         break
 
 if options.sliding_window:
-    os.makedirs(f"./"+disease+"_val_predictions_slidingwindow", exist_ok=True)
-    with open(f"./"+disease+"_val_predictions_slidingwindow/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
+    os.makedirs(f"/localscratch/ssinha97/fnp_evaluations/"+disease+"_val_predictions_slidingwindow", exist_ok=True)
+    with open(f"/localscratch/ssinha97/fnp_evaluations/"+disease+"_val_predictions_slidingwindow/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
         pickle.dump(all_results, f)
+    print("Saved val data at "+"/localscratch/ssinha97/fnp_evaluations/"+disease+"_val_predictions_slidingwindow/"+str(save_model_name)+"_predictions.pkl")
+
 else:
-    os.makedirs(f"./"+disease+"_val_predictions_normal", exist_ok=True)
-    with open(f"./"+disease+"_val_predictions_normal/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
+    os.makedirs(f"/localscratch/ssinha97/fnp_evaluations/"+disease+"_val_predictions_normal", exist_ok=True)
+    with open(f"/localscratch/ssinha97/fnp_evaluations/"+disease+"_val_predictions_normal/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
         pickle.dump(all_results, f)
+    print("Saved val data at "+"/localscratch/ssinha97/fnp_evaluations/"+disease+"_val_predictions_normal/"+str(save_model_name)+"_predictions.pkl")
 
 # Now we get results
 try:
@@ -629,7 +803,7 @@ try:
 except:
     load_model("/localscratch/ssinha97/fnp_saved_models/"+disease+"hosp_models")
 X_test = raw_data[states_to_consider_indices]
-Y_test, As = test_step(X_test, X_ref, samples=2000)
+Y_test, As = test_step(X_test, X_test_weeks, X_ref, samples=2000)
 Y_test = Y_test.squeeze()
 
 Y_test_unnorm = scaler.inverse_transform_idx_selected_states(Y_test, label_idx)

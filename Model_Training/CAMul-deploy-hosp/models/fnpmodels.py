@@ -18,7 +18,7 @@ import scipy
 import sys
 from itertools import product
 import numpy as np
-from transformers import BertModel, BertConfig
+from transformers import BertModel, BertConfig, BertForSequenceClassification
 
 class TransformerAttn(nn.Module):
     """
@@ -686,7 +686,9 @@ class RegressionFNP2(nn.Module):
         use_DAG=True,
         add_atten=False,
         cnn=False,
-        rag=False
+        rag=False,
+        nnwodot=False,
+        nn_A=False,
     ):
         """
         :param dim_x: Dimensionality of the input
@@ -716,6 +718,7 @@ class RegressionFNP2(nn.Module):
         self.add_atten = add_atten
         self.cnn = cnn
         self.rag = rag
+        self.nn_A = nn_A
         self.size_ref = size_ref
         # self.no_dag = no_dag
         # self.num_best=num_best
@@ -735,7 +738,57 @@ class RegressionFNP2(nn.Module):
             )
             / self.pairwise_g_logscale.exp()
         ).view(x.size(0), 1)
-        # transformation of the input
+        if self.nn_A != "none":
+            if "bert" in self.nn_A:
+                self.nn_z1 = nn.Linear(self.dim_u,768)
+                self.nn_z2 = nn.Linear(self.dim_u,768)
+                self.bn_1 = nn.BatchNorm1d(768)
+                self.bn_2 = nn.BatchNorm1d(768)
+                configuration = BertConfig(max_position_embeddings=2075) # TODO: remove hard coding
+                self.nn_bert_model_1 = BertModel(configuration)
+                self.nn_bert_model_2 = BertModel(configuration)
+                # self.nn_bert_model_1 = BertModel.from_pretrained("bert-base-uncased")
+                # self.nn_bert_model_2 = BertModel.from_pretrained("bert-base-uncased")
+                # pu.db
+                # if self.size_ref > 512:
+                # self.nn_bert_model = BertModel(configuration)
+                # else:
+                #     self.nn_bert_model = BertModel.from_pretrained("bert-base-uncased")
+                self.nn_z3 = nn.Linear(768,self.dim_u)
+                self.nn_z4 = nn.Linear(768,self.dim_u)
+                # self.nn_bert = lambda x: logitexp(self.nn_z2(self.nn_bert_model(inputs_embeds=self.bn(self.nn_z1(x)).unsqueeze(0))))/ self.pairwise_g_logscale.exp()
+                
+                # pu.db
+                
+                # logitexp(nn.Sequential(self.nn_z1,
+                #         self.bn,
+                #         self.nn_bert_model,
+                #         self.nn_z2)(x))/ self.pairwise_g_logscale.exp()
+
+            else:
+                if "dot" in self.nn_A:
+                    self.nn_z1 = nn.Linear(self.dim_u, 128)
+                    self.bn_1 = nn.BatchNorm1d(128)
+                else:
+                    self.nn_z1 = nn.Linear(120,128)
+                if "bn" in self.nn_A:
+                    self.bn_1 = nn.BatchNorm1d(128)
+                    self.bn_2 = nn.BatchNorm1d(1)
+                if "dot" in self.nn_A:
+                    self.nn_z2 = nn.Linear(self.dim_u, 128)
+                    self.bn_2 = nn.BatchNorm1d(128)
+                else:
+                    self.nn_z2 = nn.Linear(128,1)
+                if "bn" in self.nn_A:
+                    # pu.db
+                    self.nn_g = lambda x: nn.Sequential(self.nn_z1,
+                                            self.bn_1,
+                                            self.nn_z2,
+                                            self.bn_2)(x)/ (10*self.pairwise_g_logscale.exp())
+                else:
+                    self.nn_g = lambda x: nn.Sequential(self.nn_z1,
+                                            self.nn_z2)(x)/ (10*self.pairwise_g_logscale.exp())
+
 
         init = [nn.Linear(dim_x, self.dim_h), nn.ReLU()]
         for i in range(n_layers - 1):
@@ -771,14 +824,19 @@ class RegressionFNP2(nn.Module):
                 nn.Sigmoid()
             )
         if self.rag:
-            self.rag_z1_linear = nn.Linear(60,768)
-            self.rag_z2_linear = nn.Linear(60,768)
-            self.bert_model_1 = BertModel.from_pretrained("bert-base-uncased")
+            self.rag_z1_linear = nn.Linear(self.dim_u,768)
+            self.rag_z2_linear = nn.Linear(self.dim_u,768)
+            self.bert_model_1 = BertModel(config=BertConfig())
             if self.size_ref > 512:
                 configuration = BertConfig(max_position_embeddings=self.size_ref)
                 self.bert_model_2 = BertModel(configuration)
             else:
-                self.bert_model_2 = BertModel.from_pretrained("bert-base-uncased")
+                self.bert_model_2 = BertModel(config=BertConfig())
+            # pu.db
+        # if self.nn:
+        #     self.nn_z1_linear = nn.Linear(self.dim_u,30)
+        #     self.nn_z2_linear = nn.Linear(self.dim_u,30)
+        #     self.nn_z3_linear = nn.Linear(60,1)
 
 
 
@@ -827,10 +885,34 @@ class RegressionFNP2(nn.Module):
         #     # for idx in range(inp.shape[0]):
         #     #     A[sorted_idxs_best[:,idx],idx]=1
         # else:
-
-        if self.rag:
+        if self.nn_A != "none":
+            if self.nn_A == "bert":
+                # pu.db
+                z_1 = self.nn_z1(u[XR.size(0) :]).unsqueeze(0)
+                z_2 = self.nn_z2(u[0 : XR.size(0)]).unsqueeze(0)
+                z_1_bert = self.nn_bert_model_1(inputs_embeds=z_1).last_hidden_state.squeeze(0)
+                z_2_bert = self.nn_bert_model_2(inputs_embeds=z_2).last_hidden_state.squeeze(0)
+                z_1_back = self.nn_z3(z_1_bert)
+                z_2_back = self.nn_z4(z_2_bert)
+                A = sample_bipartite(
+                    z_1_back, z_2_back, self.pairwise_g, training=self.training
+                )    
+            elif self.nn_A == "dot":
+                Z1 = self.bn_1(self.nn_z1(u[XR.size(0) :]))
+                Z2 = self.bn_2(self.nn_z2(u[0 : XR.size(0)]))
+                Z_net = torch.tensordot(Z1,Z2.T, dims=1)/ (10*self.pairwise_g_logscale.exp())
+                # pu.db
+                # A1 = self.bert_model_1(inputs_embeds=Z1).last_hidden_state.squeeze(0)
+                # A2 = self.bert_model_2(inputs_embeds=Z2).last_hidden_state.squeeze(0)
+                A = nn.Sigmoid()(Z_net)            
+            else:
+                A = sample_bipartite(
+                    u[XR.size(0) :], u[0 : XR.size(0)], self.nn_g, training=self.training
+                )
+        elif self.rag:
             Z1 = self.rag_z1_linear(u[XR.size(0) :]).unsqueeze(0)
             Z2 = self.rag_z2_linear(u[0 : XR.size(0)]).unsqueeze(0)
+            # pu.db
             A1 = self.bert_model_1(inputs_embeds=Z1).last_hidden_state.squeeze(0)
             A2 = self.bert_model_2(inputs_embeds=Z2).last_hidden_state.squeeze(0)
             A = nn.Sigmoid()(torch.tensordot(A1,A2.T, dims=1)/1000)
@@ -961,10 +1043,36 @@ class RegressionFNP2(nn.Module):
         #     # for idx in range(inp.shape[0]):
         #     #     A[sorted_idxs_best[:,idx],idx]=1
         # else:
-        if self.cnn:
-            A = sample_bipartite(
-                u[XR.size(0) :], u[0 : XR.size(0)], self.pairwise_g, training=False, cnn=self.cnn_layer
-            )
+        if self.nn_A != "none":
+            if self.nn_A == "bert":
+                z_1 = self.nn_z1(u[XR.size(0) :]).unsqueeze(0)
+                z_2 = self.nn_z2(u[0 : XR.size(0)]).unsqueeze(0)
+                z_1_bert = self.nn_bert_model_1(inputs_embeds=z_1).last_hidden_state.squeeze(0)
+                z_2_bert = self.nn_bert_model_2(inputs_embeds=z_2).last_hidden_state.squeeze(0)
+                z_1_back = self.nn_z3(z_1_bert)
+                z_2_back = self.nn_z4(z_2_bert)
+                A = sample_bipartite(
+                    z_1_back, z_2_back, self.pairwise_g, training=self.training
+                )    
+
+            elif self.nn_A == "dot":
+                Z1 = self.bn_1(self.nn_z1(u[XR.size(0) :]))
+                Z2 = self.bn_2(self.nn_z2(u[0 : XR.size(0)]))
+                Z_net = logitexp(torch.tensordot(Z1,Z2.T, dims=1))/ self.pairwise_g_logscale.exp()
+                # pu.db
+                # A1 = self.bert_model_1(inputs_embeds=Z1).last_hidden_state.squeeze(0)
+                # A2 = self.bert_model_2(inputs_embeds=Z2).last_hidden_state.squeeze(0)
+                A = nn.Sigmoid()(Z_net)
+            else:
+                A = sample_bipartite(
+                    u[XR.size(0) :], u[0 : XR.size(0)], self.nn_g, training=self.training
+                )
+        elif self.rag:
+            Z1 = self.rag_z1_linear(u[XR.size(0) :]).unsqueeze(0)
+            Z2 = self.rag_z2_linear(u[0 : XR.size(0)]).unsqueeze(0)
+            A1 = self.bert_model_1(inputs_embeds=Z1).last_hidden_state.squeeze(0)
+            A2 = self.bert_model_2(inputs_embeds=Z2).last_hidden_state.squeeze(0)
+            A = nn.Sigmoid()(torch.tensordot(A1,A2.T, dims=1)/1000)
         else:
             A = sample_bipartite(
                 u[XR.size(0) :], u[0 : XR.size(0)], self.pairwise_g, training=False
@@ -997,7 +1105,7 @@ class RegressionFNP2(nn.Module):
 
         mean_y, logstd_y = torch.split(self.output(final_rep), 1, dim=1)
         logstd_y = torch.log(0.1 + 0.9 * F.softplus(logstd_y))
-
+        # pu.db
         init_y = Normal(mean_y, logstd_y)
         if sample:
             y_new_i = init_y.sample()

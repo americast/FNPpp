@@ -3,14 +3,16 @@ import sys
 import numpy as np
 import pickle
 import os
-
+import networkx as nx
+import dgl
+import pandas as pd
 from optparse import OptionParser
 from torch.utils.tensorboard import SummaryWriter
 import itertools
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from covid_extract.hosp_consts import include_cols_flu as include_cols
+from symp_extract.consts import include_cols
 from models.multimodels import (
     EmbedEncoder,
     GRUEncoder,
@@ -41,11 +43,12 @@ parser.add_option("-W", "--use-sliding-window", dest="sliding_window", default=F
 parser.add_option("--auto-size-best-num", dest="auto_size_best_num", default=None, type="int")
 parser.add_option("--sliding-window-size", dest="window_size", type="int", default=17)
 parser.add_option("--sliding-window-stride", dest="window_stride", type="int", default=15)
-parser.add_option("--disease", dest="disease", type="string", default="power")
+parser.add_option("--disease", dest="disease", type="string", default="symp")
 parser.add_option("--preprocess", dest="preprocess", action="store_true", default=False)
 parser.add_option("--cnn", dest="cnn", action="store_true", default=False)
 parser.add_option("--rag", dest="rag", action="store_true", default=False)
-parser.add_option("--nn", dest="nn", default="none", type="choice", choices=["none", "simple", "bn", "dot", "bert"])
+parser.add_option("--nndot", dest="nndot", action="store_true", default=False)
+parser.add_option("--nn", dest="nn", default="none", type="choice", choices=["none", "simple", "bn", "dot", "dotnbn"])
 
 (options, args) = parser.parse_args()
 # epiweek_pres = options.epiweek_pres
@@ -61,8 +64,8 @@ lr = options.lr
 epochs = options.epochs
 patience = options.patience
 disease = options.disease
-if options.rag and options.cnn:
-    print("Cannot have cnn and rag together")
+if np.sum([options.rag, options.cnn]) > 1:
+    print("Cannot have more than one among rag, cnn, nn and nndot true")
     sys.exit(0)
     
 if options.cnn:
@@ -71,6 +74,7 @@ if options.rag:
     disease = disease + "_rag"
 if options.nn != "none":
     disease = disease + "_nn-" + options.nn
+
 # First do sequence alone
 # Then add exo features
 # Then TOD (as feature, as view)
@@ -271,112 +275,234 @@ def batched_compute_pcc(x, y):
     # var_y = sum([(b - mean_y) ** 2 for b in y])
     return (cov / (torch.sqrt(var_x)+1e-6)) / (torch.sqrt(var_y)+1e-6)
 
+year = 2023
 
-with open("./data/household_power_consumption/household_power_consumption.txt", "r") as f:
-    data = f.readlines()
+start_year = 2018
 
-data = [d.strip().split(";") for d in data][1:]
+with open("./data/symptom_data/saves/combine.pkl", "rb") as f:
+    data = pickle.load(f)
 
-def get_month(ss: str):
-    i = ss.find("/")
-    return int(ss[i+1:ss[i+1:].find("/")+i + 1]) - 1
-def get_time_of_day(ss: str):
-    hour = int(ss[:2])
-    if hour < 6:
-        return 0
-    elif hour < 12:
-        return 1
-    elif hour < 18:
-        return 2
+# Make sequence for all years
+def get_sequence(data: pd.DataFrame, hhs: int, year: int) -> np.ndarray:
+    d1 = data[(data.year == year - 1) & (data.hhs == hhs) & (data.epiweek > 20)][
+        include_cols + ["ili", "epiweek", "hhs"]
+    ]
+    d2 = data[(data.year == year) & (data.hhs == hhs) & (data.epiweek <= 20)][
+        include_cols + ["ili", "epiweek", "hhs"]
+    ]
+    d1 = np.array(d1)
+    d2 = np.array(d2)
+    print(len(d1), len(d2))
+    return np.vstack((d1, d2))
+
+regions = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+train_years = [y for y in range(start_year, year)]
+test_years = [year]
+
+train_seqs = [get_sequence(data, hhs, year) for hhs in regions for year in train_years]
+test_seqs = [get_sequence(data, hhs, year) for hhs in regions for year in test_years]
+
+week_ahead = options.day_ahead
+def seq_to_dataset(seq, week_ahead=week_ahead):
+    X, Y, wk, reg = [], [], [], []
+    start_idx = max(week_ahead, seq.shape[0] - 32 + week_ahead)
+    for i in range(start_idx, seq.shape[0]):
+        X.append(seq[: i - week_ahead + 1, :-2])
+        Y.append(seq[i, -3])
+        wk.append(seq[i, -2])
+        reg.append(seq[i, -1])
+    return X, Y, wk, reg
+
+
+train_dataset = [seq_to_dataset(seq, week_ahead) for seq in train_seqs]
+X, X_symp, Y, wk, reg = [], [], [], [], []
+for x, y, w, r in train_dataset:
+    X.extend([l[:, -1] for l in x])
+    X_symp.extend([l[:, :-1] for l in x])
+    Y.extend(y)
+    wk.extend(w)
+    reg.extend(r)
+test_dataset = [seq_to_dataset(seq, week_ahead) for seq in test_seqs]
+X_test, X_symp_test, Y_test, wk_test, reg_test = [], [], [], [], []
+for x, y, w, r in test_dataset:
+    X_test.extend([l[:, -1] for l in x])
+    X_symp_test.extend([l[:, :-1] for l in x])
+    Y_test.extend(y)
+    wk_test.extend(w)
+    reg_test.extend(r)
+
+# Convert Epiweek to month
+from symp_extract.utils import epiweek_to_month
+
+mt = [epiweek_to_month(w) - 1 for w in wk]
+mt_test = [epiweek_to_month(w) - 1 for w in wk_test]
+
+# Get HHS adjacency graph
+adj = nx.Graph()
+adj.add_nodes_from(regions)
+from symp_extract.consts import hhs_neighbors
+
+for i in range(1, len(regions)):
+    adj.add_edges_from([(i, j) for j in hhs_neighbors[i]])
+
+graph = dgl.from_networkx(adj)
+graph = dgl.add_self_loop(graph)
+
+
+# Reference points
+seq_references = [x[:, -3] for x in train_seqs]
+symp_references = [x[:, :-3] for x in train_seqs]
+month_references = np.arange(12)
+reg_references = np.array(regions) - 1.0
+
+
+
+def preprocess_seq_batch(seq_list: list):
+    max_len = max([len(x) for x in seq_list])
+    if len(seq_list[0].shape) == 2:
+        ans = np.zeros((len(seq_list), max_len, len(seq_list[0][0])))
     else:
-        return 3
+        ans = np.zeros((len(seq_list), max_len, 1))
+        seq_list = [x[:, np.newaxis] for x in seq_list]
+    for i, seq in enumerate(seq_list):
+        ans[i, : len(seq), :] = seq
+    return ans
 
-tod = np.array([get_time_of_day(d[1]) for d in data], dtype=np.int32)
-month = np.array([get_month(d[0]) for d in data], dtype=np.int32)
-features = []
-for d in data:
-    f = []
-    for x in d[2:]:
-        try:
-            f.append(float(x))
-        except:
-            f.append(0.0)
-    features.append(f)
-features = np.array(features)
-features = np.expand_dims(features, axis=0)
+seq_references = preprocess_seq_batch(seq_references)
+symp_references = preprocess_seq_batch(symp_references)
+
+train_seqs = preprocess_seq_batch(X)
+train_y = np.array(Y)
+train_symp_seqs = preprocess_seq_batch(X_symp)
+mt = np.array(mt, dtype=np.int32)
+mt_test = np.array(mt_test, dtype=np.int32)
+reg = np.array(reg, dtype=np.int32) - 1
+reg_test = np.array(reg_test, dtype=np.int32) - 1
+test_seqs = preprocess_seq_batch(X_test)
+test_symp_seqs = preprocess_seq_batch(X_symp_test)
+test_y = np.array(Y_test)
+
 # pu.db
-scaler = ScalerFeat(features)
-features = scaler.transform(features)
-features = np.squeeze(features, axis=0)
-target = features[:, 0]
 
-total_time = len(data)
-test_start = int(total_time * 0.7)
-test_end = int(total_time * 0.9)
 
-X, X_symp, Y, mt, reg = [], [], [], [], []
 
-def sample_train(n_samples, window = 20):
-    X, X_symp, Y, mt, reg = [], [], [], [], []
-    start_seqs = np.random.randint(0, test_start, n_samples)
-    for start_seq in start_seqs:
-        X.append(target[start_seq:start_seq+window, np.newaxis])
-        X_symp.append(features[start_seq:start_seq+window])
-        Y.append(target[start_seq+window+(options.day_ahead - 1)])
-        mt.append(month[start_seq+window])
-        reg.append(tod[start_seq+window])
-    X = np.array(X)
-    X_symp = np.array(X_symp)
-    Y = np.array(Y)
-    mt = np.array(mt)
-    reg = np.array(reg)
-    return X, X_symp, Y, mt, reg
 
-def sample_val(n_samples, window = 20):
-    X, X_symp, Y, mt, reg = [], [], [], [], []
-    start_seqs = np.random.randint(test_start, test_end-(window - (options.day_ahead -1)), n_samples)
-    for start_seq in start_seqs:
-        X.append(target[start_seq:start_seq+window, np.newaxis])
-        X_symp.append(features[start_seq:start_seq+window])
-        Y.append(target[start_seq+window+(options.day_ahead - 1)])
-        mt.append(month[start_seq+window])
-        reg.append(tod[start_seq+window])
-    X = np.array(X)
-    X_symp = np.array(X_symp)
-    Y = np.array(Y)
-    mt = np.array(mt)
-    reg = np.array(reg)
-    return X, X_symp, Y, mt, reg
 
-def sample_test(n_samples, window = 20):
-    X, X_symp, Y, mt, reg = [], [], [], [], []
-    start_seqs = np.random.randint(test_end, total_time-(window - (options.day_ahead -1)), n_samples)
-    for start_seq in start_seqs:
-        X.append(target[start_seq:start_seq+window, np.newaxis])
-        X_symp.append(features[start_seq:start_seq+window])
-        Y.append(target[start_seq+window+(options.day_ahead - 1)])
-        mt.append(month[start_seq+window])
-        reg.append(tod[start_seq+window])
-    X = np.array(X)
-    X_symp = np.array(X_symp)
-    Y = np.array(Y)
-    mt = np.array(mt)
-    reg = np.array(reg)
-    return X, X_symp, Y, mt, reg
+
+
+
+
+
+
+
+
+
+
+# with open("./data/household_symp_consumption/household_symp_consumption.txt", "r") as f:
+#     data = f.readlines()
+
+# data = [d.strip().split(";") for d in data][1:]
+
+# def get_month(ss: str):
+#     i = ss.find("/")
+#     return int(ss[i+1:ss[i+1:].find("/")+i + 1]) - 1
+# def get_time_of_day(ss: str):
+#     hour = int(ss[:2])
+#     if hour < 6:
+#         return 0
+#     elif hour < 12:
+#         return 1
+#     elif hour < 18:
+#         return 2
+#     else:
+#         return 3
+
+# tod = np.array([get_time_of_day(d[1]) for d in data], dtype=np.int32)
+# month = np.array([get_month(d[0]) for d in data], dtype=np.int32)
+# features = []
+# for d in data:
+#     f = []
+#     for x in d[2:]:
+#         try:
+#             f.append(float(x))
+#         except:
+#             f.append(0.0)
+#     features.append(f)
+# features = np.array(features)
+# features = np.expand_dims(features, axis=0)
+# # pu.db
+# scaler = ScalerFeat(features)
+# features = scaler.transform(features)
+# features = np.squeeze(features, axis=0)
+# target = features[:, 0]
+
+# total_time = len(data)
+# test_start = int(total_time * 0.7)
+# test_end = int(total_time * 0.9)
+
+# X, X_symp, Y, mt, reg = [], [], [], [], []
+
+# def sample_train(n_samples, window = 20):
+#     X, X_symp, Y, mt, reg = [], [], [], [], []
+#     start_seqs = np.random.randint(0, test_start, n_samples)
+#     for start_seq in start_seqs:
+#         X.append(target[start_seq:start_seq+window, np.newaxis])
+#         X_symp.append(features[start_seq:start_seq+window])
+#         Y.append(target[start_seq+window+(options.day_ahead - 1)])
+#         mt.append(month[start_seq+window])
+#         reg.append(tod[start_seq+window])
+#     X = np.array(X)
+#     X_symp = np.array(X_symp)
+#     Y = np.array(Y)
+#     mt = np.array(mt)
+#     reg = np.array(reg)
+#     return X, X_symp, Y, mt, reg
+
+# def sample_val(n_samples, window = 20):
+#     X, X_symp, Y, mt, reg = [], [], [], [], []
+#     start_seqs = np.random.randint(test_start, test_end-(window - (options.day_ahead -1)), n_samples)
+#     for start_seq in start_seqs:
+#         X.append(target[start_seq:start_seq+window, np.newaxis])
+#         X_symp.append(features[start_seq:start_seq+window])
+#         Y.append(target[start_seq+window+(options.day_ahead - 1)])
+#         mt.append(month[start_seq+window])
+#         reg.append(tod[start_seq+window])
+#     X = np.array(X)
+#     X_symp = np.array(X_symp)
+#     Y = np.array(Y)
+#     mt = np.array(mt)
+#     reg = np.array(reg)
+#     return X, X_symp, Y, mt, reg
+
+# def sample_test(n_samples, window = 20):
+#     X, X_symp, Y, mt, reg = [], [], [], [], []
+#     start_seqs = np.random.randint(test_end, total_time-(window - (options.day_ahead -1)), n_samples)
+#     for start_seq in start_seqs:
+#         X.append(target[start_seq:start_seq+window, np.newaxis])
+#         X_symp.append(features[start_seq:start_seq+window])
+#         Y.append(target[start_seq+window+(options.day_ahead - 1)])
+#         mt.append(month[start_seq+window])
+#         reg.append(tod[start_seq+window])
+#     X = np.array(X)
+#     X_symp = np.array(X_symp)
+#     Y = np.array(Y)
+#     mt = np.array(mt)
+#     reg = np.array(reg)
+#     return X, X_symp, Y, mt, reg
 # pu.db
 
 # Reference points
 # len_seq = test_start//splits
-X_ref = features
-# X_ref = features[np.newaxis,:,0]
-# seq_references = np.array([features[i: i+len_seq, 0, np.newaxis] for i in range(0, test_start, len_seq)])[:, :options.batch_size, :]
-# symp_references = np.array([features[i: i+len_seq] for i in range(0, test_start, len_seq)])[:, :options.batch_size, :]
-# month_references = np.arange(12)
-# reg_references = np.arange(4)
-# splits = 4
-train_seqs, X_train, Y_train, mt, reg = sample_train(options.batch_size)
-val_seqs, X_val, Y_val, mt_val, reg_val = sample_val(options.batch_size)
-test_seqs, X_test, Y_test, mt_test, reg_test = sample_test(options.batch_size)
+# X_ref = features
+# # X_ref = features[np.newaxis,:,0]
+# # seq_references = np.array([features[i: i+len_seq, 0, np.newaxis] for i in range(0, test_start, len_seq)])[:, :options.batch_size, :]
+# # symp_references = np.array([features[i: i+len_seq] for i in range(0, test_start, len_seq)])[:, :options.batch_size, :]
+# # month_references = np.arange(12)
+# # reg_references = np.arange(4)
+# # splits = 4
+# train_seqs, X_train, Y_train, mt, reg = sample_train(options.batch_size)
+# val_seqs, X_val, Y_val, mt_val, reg_val = sample_val(options.batch_size)
+# test_seqs, X_test, Y_test, mt_test, reg_test = sample_test(options.batch_size)
 # pu.db
 
 kernel_size = 25
@@ -391,17 +517,19 @@ def moving_avg(x, kernel_size=25):
     x = x.detach().numpy().tolist()
     return np.array(x[0][0])
 
-X_ref = np.expand_dims(X_ref, axis=0)
+# X_ref = np.expand_dims(X_ref, axis=0)
 if options.sliding_window:
+    # pu.db
     if options.auto_size_best_num is not None:
-        lags = [x for x in range(100,1200,100)]
+        lags = [x for x in range(10,24,1)]
+        # pu.db
         # for x in range(5,10:
         #     lags.append(2**x)
         idx_scores = [0 for x in range(len(lags))]
-        to_concat = []
-        seq_lengths = []
-        for st_idx in tqdm(range(7)):
-            series_here = X_ref[0, :, st_idx]
+        for st_idx in tqdm(range(1)):
+            try:
+                series_here = seq_references[0, :, st_idx]
+            except: pu.db
             series_here = series_here - moving_avg(series_here)
             acs = []
             for lag in lags:
@@ -410,49 +538,26 @@ if options.sliding_window:
                     ac_here.append(series_here[it] * series_here[it - lag])
                 acs.append(np.mean(np.array(ac_here)))
             sorted_indices = np.flip(np.argsort(acs)).tolist()
-            lag_needed = lags[sorted_indices[options.auto_size_best_num]]
-            for w in range(0, X_ref.shape[1] - lag_needed + 1, lag_needed):
-                seq_lengths.append(lag_needed)
-                to_concat.append(X_ref[:,w:w + lag_needed, :])
+            for k, sindxs in enumerate(sorted_indices):
+                idx_scores[sindxs] += len(lags) - k
 
-
-            # for k, sindxs in enumerate(sorted_indices):
-            #     seq_lengths.append(lag_needed)
-            #     idx_scores[sindxs] += len(lags) - k
-
-        max_length = np.max(seq_lengths)
-        # pu.db
-        for t, tc in enumerate(to_concat):
-            len_here = tc.shape[1]
-            diff_len = max_length - len_here
-            to_concat[t] = np.concatenate([to_concat[t], np.zeros((1,diff_len,7))], axis=1)
-        # pu.db
-        X_ref = np.concatenate(to_concat)
-        to_choose = []
-        for k in range(0,X_ref.shape[0],5):
-            to_choose.append(k)
-        X_ref = X_ref[to_choose]
-        to_choose = []
-        for k in range(0,X_ref.shape[1],5):
-            to_choose.append(k)
-        X_ref = X_ref[:,to_choose,:]
-        ilk = ils = X_ref.shape[1]
-
-        # lags_needed_idxs = np.flip(np.argsort(idx_scores)).tolist()
-        # ilk = lags[lags_needed_idxs[options.auto_size_best_num]]
-        # ils = lags[lags_needed_idxs[options.auto_size_best_num]]
+        lags_needed_idxs = np.flip(np.argsort(idx_scores)).tolist()
+        try:
+            ilk = lags[lags_needed_idxs[options.auto_size_best_num]]
+            ils = lags[lags_needed_idxs[options.auto_size_best_num]]
+        except:
+            pu.db
     else:
-        # pu.db
         ilk = options.window_size
         ils = options.window_stride
     # """
-        to_concat = []
-        for w in range(0, X_ref.shape[1] - ilk + 1, options.window_stride):
-            to_concat.append(X_ref[:,w:w + ilk])
-        
-        X_ref_orig_shape = X_ref.shape
-        X_ref = np.concatenate(to_concat)
-        # pu.db
+    to_concat = []
+    for w in range(0, seq_references.shape[1] - ilk + 1, options.window_stride):
+        to_concat.append(seq_references[:,w:w + ilk])
+    
+    seq_references_orig_shape = seq_references.shape
+    seq_references = np.concatenate(to_concat)
+    
     if options.preprocess:
         all_idxs = np.zeros((X_ref.shape[0], X_train.shape[0], X_ref.shape[1]+X_train.shape[1]))
         for idx in tqdm(product(range(X_ref.shape[0]), range(X_train.shape[0]))):
@@ -467,13 +572,18 @@ if options.sliding_window:
 
 
 # Build model
-feat_enc = GRUEncoder(in_size=7, out_dim=60,).to(device)
-seq_enc = GRUEncoder(in_size=7, out_dim=60,).to(device)
+# feat_enc = GRUEncoder(in_size=7, out_dim=60,).to(device)
+# seq_enc = GRUEncoder(in_size=7, out_dim=60,).to(device)
+
+month_enc = EmbedEncoder(in_size=12, out_dim=60).to(device)
+seq_encoder = GRUEncoder(in_size=1, out_dim=60).to(device)
+symp_encoder = GRUEncoder(in_size=14, out_dim=60).to(device)
+
 fnp_enc = RegressionFNP2(
     dim_x=60,
     dim_y=1,
     dim_h=100,
-    size_ref=X_ref.shape[0],
+    size_ref=seq_references.shape[0],
     n_layers=3,
     num_M=batch_size,
     dim_u=60,
@@ -485,7 +595,7 @@ fnp_enc = RegressionFNP2(
     rag=options.rag,
     nn_A=options.nn
 ).to(device)
-
+# pu.db
 
 def load_model(folder, file=save_model_name):
     """
@@ -493,8 +603,8 @@ def load_model(folder, file=save_model_name):
     """
     full_path = os.path.join(folder, file)
     assert os.path.exists(full_path)
-    feat_enc.load_state_dict(torch.load(os.path.join(full_path, "feat_enc.pt")))
-    seq_enc.load_state_dict(torch.load(os.path.join(full_path, "seq_enc.pt")))
+    symp_encoder.load_state_dict(torch.load(os.path.join(full_path, "symp_enc.pt")))
+    seq_encoder.load_state_dict(torch.load(os.path.join(full_path, "seq_enc.pt")))
     fnp_enc.load_state_dict(torch.load(os.path.join(full_path, "fnp_enc.pt")))
 
 
@@ -504,88 +614,94 @@ def save_model(folder, file=save_model_name):
     """
     full_path = os.path.join(folder, file)
     os.makedirs(full_path, exist_ok=True)
-    torch.save(feat_enc.state_dict(), os.path.join(full_path, "feat_enc.pt"))
-    torch.save(seq_enc.state_dict(), os.path.join(full_path, "seq_enc.pt"))
+    torch.save(symp_encoder.state_dict(), os.path.join(full_path, "symp_enc.pt"))
+    torch.save(seq_encoder.state_dict(), os.path.join(full_path, "seq_enc.pt"))
     torch.save(fnp_enc.state_dict(), os.path.join(full_path, "fnp_enc.pt"))
 
 
 # Build dataset
 class SeqData(torch.utils.data.Dataset):
-    def __init__(self, X, Y):
+    def __init__(self, X, X_symp, X_mt, Y):
         self.X = X
+        self.X_symp = X_symp
+        self.X_mt = X_mt[:, None]
         self.Y = Y[:, None]
 
     def __len__(self):
         return self.X.shape[0]
 
     def __getitem__(self, idx):
+        # pu.db
         return (
             float_tensor(self.X[idx, :, :]),
+            float_tensor(self.X_symp[idx, :, :]),
+            float_tensor(self.X_mt[idx]),
             float_tensor(self.Y[idx]),
         )
 
 # Build dataset with state info
-class SeqDataWithStates(torch.utils.data.Dataset):
-    def __init__(self, X, Y, states):
-        self.X = X
-        self.Y = Y[:, None]
-        self.states = states
+# class SeqDataWithStates(torch.utils.data.Dataset):
+#     def __init__(self, X, Y, states):
+#         self.X = X
+#         self.Y = Y[:, None]
+#         self.states = states
 
-    def __len__(self):
-        return self.X.shape[0]
+#     def __len__(self):
+#         return self.X.shape[0]
 
-    def __getitem__(self, idx):
-        try:
-            return (
-                float_tensor(self.X[idx, :, :]),
-                float_tensor(self.Y[idx]),
-                self.states[idx],
-            )
-        except:
-            pu.db
+#     def __getitem__(self, idx):
+#         try:
+#             return (
+#                 float_tensor(self.X[idx, :, :]),
+#                 float_tensor(self.Y[idx]),
+#                 self.states[idx],
+#             )
+#         except:
+#             pu.db
 
-train_dataset = SeqData(X_train, Y_train)
-val_dataset = SeqData(X_val, Y_val)
-val_dataset_with_states = SeqData(X_val, Y_val)
+train_dataset = SeqData(train_seqs, train_symp_seqs, mt, train_y)
+val_dataset = SeqData(test_seqs, test_symp_seqs, mt_test, test_y)
+# val_dataset_with_states = SeqData(X_val, Y_val)
+# pu.db
 train_loader = torch.utils.data.DataLoader(
     train_dataset, batch_size=batch_size, shuffle=True
 )
 val_loader = torch.utils.data.DataLoader(
     val_dataset, batch_size=batch_size, shuffle=True
 )
-val_loader_with_states = torch.utils.data.DataLoader(
-    val_dataset_with_states, batch_size=batch_size, shuffle=True
-)
-if start_model != "None":
-    load_model("./"+disease+"power_models", file=start_model)
-    print("Loaded model from", start_model)
+# val_loader_with_states = torch.utils.data.DataLoader(
+#     val_dataset_with_states, batch_size=batch_size, shuffle=True
+# )
+# if start_model != "None":
+load_model("/localscratch/ssinha97/"+disease+"symp_models")
+print("Loaded model from", "/localscratch/ssinha97/"+disease+"symp_models")
 
 opt = torch.optim.Adam(
-    list(seq_enc.parameters())
-    + list(feat_enc.parameters())
+    list(seq_encoder.parameters())
+    + list(symp_encoder.parameters())
     + list(fnp_enc.parameters()),
     lr=lr,
 )
 
 
-def train_step(data_loader, X, Y, X_ref):
+def train_step(data_loader):
     """
     Train step
     """
-    feat_enc.train()
-    seq_enc.train()
+    seq_encoder.train()
+    month_enc.train()
+    symp_encoder.train()
     fnp_enc.train()
     total_loss = 0.0
     train_err = 0.0
     YP = []
     T_target = []
-    for i, (x, y) in enumerate(data_loader):
+    for i, (x, x_symp, x_mt, y) in enumerate(data_loader):
         opt.zero_grad()
-        x_seq = seq_enc(float_tensor(X_ref))
-        x_feat = feat_enc(x)
-        pu.db
-        loss, yp, _ = fnp_enc(x_seq, float_tensor(X_ref), x_feat, y)
-        yp = yp[X_ref.shape[0] :]
+        x_seq = seq_encoder(float_tensor(seq_references))
+        x_feat = symp_encoder(x_symp)
+        loss, yp, _ = fnp_enc(x_seq, float_tensor(seq_references), x_feat, y)
+        yp = yp[seq_references.shape[0] :]
         loss.backward()
         opt.step()
         YP.append(yp.detach().cpu().numpy())
@@ -600,28 +716,30 @@ def train_step(data_loader, X, Y, X_ref):
     )
 
 
-def val_step(data_loader, X, Y, X_ref, sample=True):
+def val_step(data_loader, sample=True):
     """
     Validation step
     """
     with torch.set_grad_enabled(False):
-        feat_enc.eval()
-        seq_enc.eval()
+        seq_encoder.eval()
+        month_enc.eval()
+        symp_encoder.eval()
         fnp_enc.eval()
         val_err = 0.0
         YP = []
         T_target = []
         all_vars = []
         all_As = []
-        # load_model("/localscratch/ssinha97/"+disease+"power_models")
-        for i, (x, y) in enumerate(data_loader):
-            x_seq = seq_enc(float_tensor(X_ref))
-            x_feat = feat_enc(x)
+        # load_model("/localscratch/ssinha97/"+disease+"symp_models")
+        for i, (x, x_symp, x_mt, y) in enumerate(data_loader):
+            x_seq = seq_encoder(float_tensor(seq_references))
+            x_feat = symp_encoder(x_symp)
             yp, _, vars, _, _, _, A = fnp_enc.predict(
-                x_feat, x_seq, float_tensor(X_ref), sample
+                x_feat, x_seq, float_tensor(seq_references), sample
             )
-            # pu.db
+            # print(i)
             val_err += torch.pow(yp - y, 2).mean().sqrt().detach().cpu().numpy()
+            # pu.db
             YP.extend(yp.detach().cpu().numpy().squeeze(-1).tolist())
             T_target.extend(y.detach().cpu().numpy().squeeze(-1).tolist())
             all_vars.extend(vars.detach().cpu().numpy().squeeze(-1).tolist())
@@ -661,93 +779,93 @@ def val_step(data_loader, X, Y, X_ref, sample=True):
 #         return val_err / (i + 1), np.array(YP, dtype=object).ravel(), np.array(T_target).ravel(), states_here, all_vars
 
 
-def test_step(X, X_ref, samples=1000):
-    """
-    Test step
-    """
-    with torch.set_grad_enabled(False):
-        feat_enc.eval()
-        seq_enc.eval()
-        fnp_enc.eval()
-        YP = []
-        As = []
-        for i in tqdm(range(samples)):
-            x_seq = seq_enc(float_tensor(X_ref))
-            x_feat = feat_enc(float_tensor(X))
-            yp, _, vars, _, _, _, A = fnp_enc.predict(
-                x_feat, x_seq, float_tensor(X_ref), sample=False
-            )
-            YP.append(yp.detach().cpu().numpy())
-            As.append(A.cpu().numpy())
-        return np.array(YP), As
+# def test_step(X, X_ref, samples=1000):
+#     """
+#     Test step
+#     """
+#     with torch.set_grad_enabled(False):
+#         feat_enc.eval()
+#         seq_enc.eval()
+#         fnp_enc.eval()
+#         YP = []
+#         As = []
+#         for i in tqdm(range(samples)):
+#             x_seq = seq_enc(float_tensor(X_ref))
+#             x_feat = feat_enc(float_tensor(X))
+#             yp, _, vars, _, _, _, A = fnp_enc.predict(
+#                 x_feat, x_seq, float_tensor(X_ref), sample=False
+#             )
+#             YP.append(yp.detach().cpu().numpy())
+#             As.append(A.cpu().numpy())
+#         return np.array(YP), As
 
 
 min_val_err = np.inf
 min_val_epoch = 0
 all_results = {}
-for ep in range(epochs):
+for ep in range(1):
     print(f"Epoch {ep+1}")
     print("---------------Details-----------------")
     print("Week ahead: "+str(options.day_ahead))
     if options.auto_size_best_num is not None:
         print("Auto num: "+str(options.auto_size_best_num))
         print("Window size: "+str(ilk))
-    print("num refs: "+str(X_ref.shape[0]))
     if options.seed != 0:
-        print("Seed: "+str(options.seed))
+        print("seed: "+str(options.seed))
+    print("num refs: "+str(seq_references.shape[0]))
     print("---------------------------------------")
-    train_loss, train_err, yp, yt = train_step(train_loader, X_train, Y_train, X_ref)
-    print(f"Train loss: {train_loss:.4f}, Train err: {train_err:.4f}")
-    val_err, yp, yt, vars, As = val_step(val_loader, X_val, Y_val, X_ref)
+    # train_loss, train_err, yp, yt = train_step(train_loader)
+    # print(f"Train loss: {train_loss:.4f}, Train err: {train_err:.4f}")
+    val_err, yp, yt, vars, As = val_step(val_loader)
     print(f"Val err: {val_err:.4f}")
-    # pu.db
     all_results[ep] = {"pred": yp, "gt": yt, "vars": vars, "As": As}
-    if options.tb:
-        writer.add_scalar('Train/RMSE', train_err, ep)
-        writer.add_scalar('Train/loss', train_loss, ep)
-        writer.add_scalar('Val/RMSE', val_err, ep)
-    if val_err < min_val_err:
-        min_val_err = val_err
-        min_val_epoch = ep
-        try:
-            save_model("/nvmescratch/ssinha97/"+disease+"power_models")
-        except:
-            save_model("/localscratch/ssinha97/"+disease+"power_models")
-        print("Saved model")
-    print()
-    print()
+    # if options.tb:
+    #     writer.add_scalar('Train/RMSE', train_err, ep)
+    #     writer.add_scalar('Train/loss', train_loss, ep)
+    #     writer.add_scalar('Val/RMSE', val_err, ep)
+    # if val_err < min_val_err:
+    #     min_val_err = val_err
+    #     min_val_epoch = ep
+    #     try:
+    #         save_model("/nvmescratch/ssinha97/"+disease+"symp_models")
+    #     except:
+    #         save_model("/localscratch/ssinha97/"+disease+"symp_models")
+    #     print("Saved model")
+    # print()
+    # print()
     if ep > 100 and ep - min_val_epoch > patience:
         break
 
 if options.sliding_window:
-    os.makedirs(f"/localscratch/ssinha97/fnp_evaluations/"+disease+"_val_predictions_slidingwindow", exist_ok=True)
-    with open(f"/localscratch/ssinha97/fnp_evaluations/"+disease+"_val_predictions_slidingwindow/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
+    os.makedirs(f"./"+disease+"_val_predictions_slidingwindow", exist_ok=True)
+    with open(f"./"+disease+"_val_predictions_slidingwindow/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
         pickle.dump(all_results, f)
-    print("Saved val data at "+"/localscratch/ssinha97/fnp_evaluations/"+disease+"_val_predictions_slidingwindow/"+str(save_model_name)+"_predictions.pkl")
+    print("Saved at "+"./"+disease+"_val_predictions_slidingwindow/"+str(save_model_name)+"_predictions.pkl")
 else:
-    os.makedirs(f"/localscratch/ssinha97/fnp_evaluations/"+disease+"_val_predictions_normal", exist_ok=True)
-    with open(f"/localscratch/ssinha97/fnp_evaluations/"+disease+"_val_predictions_normal/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
+    # pu.db
+    os.makedirs(f"./"+disease+"_val_predictions_normal", exist_ok=True)
+    with open(f"./"+disease+"_val_predictions_normal/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
         pickle.dump(all_results, f)
-    print("Saved val data at "+"/localscratch/ssinha97/fnp_evaluations/"+disease+"_val_predictions_normal/"+str(save_model_name)+"_predictions.pkl")
+    print("Saved at "+"./"+disease+"_val_predictions_normal/"+str(save_model_name)+"_predictions.pkl")
 
-"""
+print("min val error: ")
+print(min_val_err)
 # Now we get results
-try:
-    load_model("/nvmescratch/ssinha97/"+disease+"power_models")
-except:
-    load_model("/localscratch/ssinha97/"+disease+"power_models")
-Y_pred, As = test_step(X_test, X_ref, samples=2000)
-Y_pred = Y_pred.squeeze()
-Y_pred_unnorm = scaler.inverse_transform_idx(Y_pred, label_idx)
-X_test_unnorm = scaler.inverse_transform_idx(X_test, label_idx)
-Y_test_unnorm = scaler.inverse_transform_idx(Y_test, label_idx)
-# Save predictions
-if options.sliding_window:
-    os.makedirs(f"./"+disease+"_power_stable_predictions_slidingwindow", exist_ok=True)
-    with open(f"./"+disease+"_power_stable_predictions_slidingwindow/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
-        pickle.dump([Y_pred_unnorm, Y_test_unnorm, X_test_unnorm[:, :, label_idx], As], f)
-else:
-    os.makedirs(f"./"+disease+"_power_stable_predictions", exist_ok=True)
-    with open(f"./"+disease+"_power_stable_predictions/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
-        pickle.dump([Y_pred_unnorm, Y_test_unnorm, X_test_unnorm[:, :, label_idx], As], f)
-"""
+# try:
+#     load_model("/nvmescratch/ssinha97/"+disease+"symp_models")
+# except:
+#     load_model("/localscratch/ssinha97/"+disease+"symp_models")
+# Y_pred, As = test_step(X_test, X_ref, samples=2000)
+# Y_pred = Y_pred.squeeze()
+# Y_pred_unnorm = scaler.inverse_transform_idx(Y_pred, label_idx)
+# X_test_unnorm = scaler.inverse_transform_idx(X_test, label_idx)
+# Y_test_unnorm = scaler.inverse_transform_idx(Y_test, label_idx)
+# # Save predictions
+# if options.sliding_window:
+#     os.makedirs(f"./"+disease+"_symp_stable_predictions_slidingwindow", exist_ok=True)
+#     with open(f"./"+disease+"_symp_stable_predictions_slidingwindow/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
+#         pickle.dump([Y_pred_unnorm, Y_test_unnorm, X_test_unnorm[:, :, label_idx], As], f)
+# else:
+#     os.makedirs(f"./"+disease+"_symp_stable_predictions", exist_ok=True)
+#     with open(f"./"+disease+"_symp_stable_predictions/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
+#         pickle.dump([Y_pred_unnorm, Y_test_unnorm, X_test_unnorm[:, :, label_idx], As], f)

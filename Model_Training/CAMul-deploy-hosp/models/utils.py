@@ -165,7 +165,6 @@ def sample_bipartite(Z1, Z2, g, training=True, temperature=0.3, cnn=None):
     Z_pairs = torch.cat([Z1[indices[:, 0]], Z2[indices[:, 1]]], 1)
 
     if cnn is not None:
-        # pu.db
         Z_pairs = Z_pairs.reshape((Z1.size(0), Z2.size(0), -1)).permute((2,0,1))
         A = cnn(Z_pairs)
         A = A.squeeze(0)
@@ -174,6 +173,7 @@ def sample_bipartite(Z1, Z2, g, training=True, temperature=0.3, cnn=None):
         if training:
             p_edges = LogitRelaxedBernoulli(logits=logits, temperature=temperature)
             A_vals = torch.sigmoid(p_edges.rsample())
+            # pu.db
         else:
             p_edges = Bernoulli(logits=logits)
             A_vals = p_edges.sample()
@@ -182,6 +182,7 @@ def sample_bipartite(Z1, Z2, g, training=True, temperature=0.3, cnn=None):
         A = float_tensor(Z1.size(0), Z2.size(0)).zero_()
         A[indices[:, 0], indices[:, 1]] = A_vals.squeeze()
 
+    # pu.db
     return A
 
 

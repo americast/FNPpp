@@ -22,12 +22,13 @@ from models.multimodels import (
 from models.fnpmodels import RegressionFNP2
 from tqdm import tqdm
 from itertools import product
+from datasets import load_dataset
 
 parser = OptionParser()
 # parser.add_option("-p", "--epiweek_pres", dest="epiweek_pres", default="202240", type="string")
 # parser.add_option("-e", "--epiweek", dest="epiweek", default="202140", type="string")
 parser.add_option("--epochs", dest="epochs", default=3500, type="int")
-parser.add_option("--lr", dest="lr", default=1e-5, type="float")
+parser.add_option("--lr", dest="lr", default=1e-4, type="float")
 parser.add_option("--patience", dest="patience", default=1000, type="int")
 parser.add_option("-d", "--day", dest="day_ahead", default=1, type="int")
 parser.add_option("-s", "--seed", dest="seed", default=0, type="int")
@@ -36,12 +37,12 @@ parser.add_option("-m", "--save", dest="save_model", default="default", type="st
 parser.add_option("--start_model", dest="start_model", default="None", type="string")
 parser.add_option("-c", "--cuda", dest="cuda", default=True, action="store_true")
 parser.add_option("--start", dest="start_day", default=-120, type="int")
-parser.add_option("-t", "--tb", action="store_true", dest="tb", default=False)
+parser.add_option("-t", "--tb", action="store_true", dest="tb", default=True)
 parser.add_option("-W", "--use-sliding-window", dest="sliding_window", default=False, action="store_true")
 parser.add_option("--auto-size-best-num", dest="auto_size_best_num", default=None, type="int")
 parser.add_option("--sliding-window-size", dest="window_size", type="int", default=17)
 parser.add_option("--sliding-window-stride", dest="window_stride", type="int", default=15)
-parser.add_option("--disease", dest="disease", type="string", default="power")
+parser.add_option("--disease", dest="disease", type="string", default="traffic")
 parser.add_option("--preprocess", dest="preprocess", action="store_true", default=False)
 parser.add_option("--cnn", dest="cnn", action="store_true", default=False)
 parser.add_option("--rag", dest="rag", action="store_true", default=False)
@@ -59,6 +60,7 @@ start_day = options.start_day
 batch_size = options.batch_size
 lr = options.lr
 epochs = options.epochs
+# epochs = 1
 patience = options.patience
 disease = options.disease
 if options.rag and options.cnn:
@@ -177,13 +179,8 @@ device = "cuda" if (cuda and torch.cuda.is_available()) else "cpu"
 # raw_data_unnorm = raw_data.copy()
 
 if options.tb:
-    if options.sliding_window:
-        if options.preprocess:
-            writer = SummaryWriter("runs/"+disease+"/"+disease+"_preprocessedslidingwindow_weekahead_"+str(options.day_ahead)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
-        else:
-            writer = SummaryWriter("runs/"+disease+"/"+disease+"_slidingwindow_weekahead_"+str(options.day_ahead)+"_windowsize_"+str(options.window_size)+"_stride_"+str(options.window_stride))
-    else:
-        writer = SummaryWriter("runs/"+disease+"/"+disease+"_normal_weekahead_"+str(options.day_ahead))
+    writer = SummaryWriter("runs/"+disease+"/"+options.save_model)
+
 label_idx = 0
 class ScalerFeat:
     def __init__(self, raw_data):
@@ -272,6 +269,7 @@ def batched_compute_pcc(x, y):
     return (cov / (torch.sqrt(var_x)+1e-6)) / (torch.sqrt(var_y)+1e-6)
 
 
+"""
 with open("./data/household_power_consumption/household_power_consumption.txt", "r") as f:
     data = f.readlines()
 
@@ -290,7 +288,6 @@ def get_time_of_day(ss: str):
         return 2
     else:
         return 3
-
 tod = np.array([get_time_of_day(d[1]) for d in data], dtype=np.int32)
 month = np.array([get_month(d[0]) for d in data], dtype=np.int32)
 features = []
@@ -304,79 +301,97 @@ for d in data:
     features.append(f)
 features = np.array(features)
 features = np.expand_dims(features, axis=0)
+"""
+
+dataset = load_dataset("monash_tsf", "traffic_weekly")
+traffic_rows = 862
+train_len = 88
+val_len = 96
+test_len = 104
+
+# features_traffic_train = []
+# for i in range(traffic_rows):
+#     features_traffic_train.append(dataset["train"][i]["target"])
+# features_traffic_train = np.array(features_traffic_train).T
+
+# features_traffic_validation = []
+# for i in range(traffic_rows):
+#     features_traffic_validation.append(dataset["validation"][i]["target"])
+# features_traffic_validation = np.array(features_traffic_validation).T
+
+features_traffic_test = []
+for i in range(traffic_rows):
+    features_traffic_test.append(dataset["test"][i]["target"])
+features_traffic_test = np.array(features_traffic_test).T
+
+# features = np.concatenate([features_traffic_train, features_traffic_validation, features_traffic_test], axis=0)
+features = np.expand_dims(features_traffic_test, axis = 0)
 # pu.db
 scaler = ScalerFeat(features)
 features = scaler.transform(features)
 features = np.squeeze(features, axis=0)
-target = features[:, 0]
+# target = features[:, 0]
+target = features
 
-total_time = len(data)
-test_start = int(total_time * 0.7)
-test_end = int(total_time * 0.9)
+total_time = test_len
+val_start = train_len
+val_end = val_len
 
 X, X_symp, Y, mt, reg = [], [], [], [], []
 
-def sample_train(n_samples, window = 20):
-    X, X_symp, Y, mt, reg = [], [], [], [], []
-    start_seqs = np.random.randint(0, test_start, n_samples)
-    for start_seq in start_seqs:
-        X.append(target[start_seq:start_seq+window, np.newaxis])
-        X_symp.append(features[start_seq:start_seq+window])
-        Y.append(target[start_seq+window+(options.day_ahead - 1)])
-        mt.append(month[start_seq+window])
-        reg.append(tod[start_seq+window])
+def sample_train(window = 20):
+    X, Y = [], []
+    start_seqs = list(range(0, val_start - (window + options.day_ahead)))
+    for start_seq in tqdm(start_seqs):
+        # X.append(target[start_seq:start_seq+window, np.newaxis])
+        for traffic_row in range(traffic_rows):
+            X.append(features[start_seq:start_seq+window])
+            Y.append(features[start_seq+window+(options.day_ahead - 1), traffic_row])
+        # mt.append(month[start_seq+window])
+        # reg.append(tod[start_seq+window])
+    # X = np.array(X)
     X = np.array(X)
-    X_symp = np.array(X_symp)
     Y = np.array(Y)
-    mt = np.array(mt)
-    reg = np.array(reg)
-    return X, X_symp, Y, mt, reg
+    # mt = np.array(mt)
+    # reg = np.array(reg)
+    return X,Y
 
-def sample_val(n_samples, window = 20):
-    X, X_symp, Y, mt, reg = [], [], [], [], []
-    start_seqs = np.random.randint(test_start, test_end-(window - (options.day_ahead -1)), n_samples)
-    for start_seq in start_seqs:
-        X.append(target[start_seq:start_seq+window, np.newaxis])
-        X_symp.append(features[start_seq:start_seq+window])
-        Y.append(target[start_seq+window+(options.day_ahead - 1)])
-        mt.append(month[start_seq+window])
-        reg.append(tod[start_seq+window])
+def sample_val(window = 20):
+    X, Y = [], []
+    start_seqs = list(range(val_start - (window + options.day_ahead), val_end - (window + options.day_ahead)))
+    for start_seq in tqdm(start_seqs):
+        for traffic_row in range(traffic_rows):
+            X.append(features[start_seq:start_seq+window])
+            Y.append(features[start_seq+window+(options.day_ahead - 1), traffic_row])
     X = np.array(X)
-    X_symp = np.array(X_symp)
     Y = np.array(Y)
-    mt = np.array(mt)
-    reg = np.array(reg)
-    return X, X_symp, Y, mt, reg
+    return X, Y
 
-def sample_test(n_samples, window = 20):
-    X, X_symp, Y, mt, reg = [], [], [], [], []
-    start_seqs = np.random.randint(test_end, total_time-(window - (options.day_ahead -1)), n_samples)
-    for start_seq in start_seqs:
-        X.append(target[start_seq:start_seq+window, np.newaxis])
-        X_symp.append(features[start_seq:start_seq+window])
-        Y.append(target[start_seq+window+(options.day_ahead - 1)])
-        mt.append(month[start_seq+window])
-        reg.append(tod[start_seq+window])
+def sample_test(window = 20):
+    X, Y, label_idxs = [], [], []
+    start_seqs = list(range(val_end - (window + options.day_ahead), total_time-(window + (options.day_ahead))))
+    for start_seq in tqdm(start_seqs):
+        for traffic_row in range(traffic_rows):
+            X.append(features[start_seq:start_seq+window])
+            Y.append(features[start_seq+window+(options.day_ahead - 1), traffic_row])
+            label_idxs.append(traffic_row)
     X = np.array(X)
-    X_symp = np.array(X_symp)
     Y = np.array(Y)
-    mt = np.array(mt)
-    reg = np.array(reg)
-    return X, X_symp, Y, mt, reg
+    return X, Y, label_idxs
 # pu.db
 
 # Reference points
 # len_seq = test_start//splits
-X_ref = features
+X_ref = features[:val_start]
 # X_ref = features[np.newaxis,:,0]
 # seq_references = np.array([features[i: i+len_seq, 0, np.newaxis] for i in range(0, test_start, len_seq)])[:, :options.batch_size, :]
 # symp_references = np.array([features[i: i+len_seq] for i in range(0, test_start, len_seq)])[:, :options.batch_size, :]
 # month_references = np.arange(12)
 # reg_references = np.arange(4)
 # splits = 4
-train_seqs, X_train, Y_train, mt, reg = sample_train(options.batch_size)
-val_seqs, X_val, Y_val, mt_val, reg_val = sample_val(options.batch_size)
-test_seqs, X_test, Y_test, mt_test, reg_test = sample_test(options.batch_size)
+X_train, Y_train = sample_train()
+X_val, Y_val = sample_val()
+X_test, Y_test, label_idxs_test = sample_test()
 # pu.db
 
 kernel_size = 25
@@ -467,8 +482,8 @@ if options.sliding_window:
 
 
 # Build model
-feat_enc = GRUEncoder(in_size=7, out_dim=60,).to(device)
-seq_enc = GRUEncoder(in_size=7, out_dim=60,).to(device)
+feat_enc = GRUEncoder(in_size=862, out_dim=60,).to(device)
+seq_enc = GRUEncoder(in_size=1, out_dim=60,).to(device)
 fnp_enc = RegressionFNP2(
     dim_x=60,
     dim_y=1,
@@ -557,7 +572,7 @@ val_loader_with_states = torch.utils.data.DataLoader(
     val_dataset_with_states, batch_size=batch_size, shuffle=True
 )
 if start_model != "None":
-    load_model("./"+disease+"power_models", file=start_model)
+    load_model("./"+disease+"traffic_models", file=start_model)
     print("Loaded model from", start_model)
 
 opt = torch.optim.Adam(
@@ -567,6 +582,7 @@ opt = torch.optim.Adam(
     lr=lr,
 )
 
+X_ref = X_ref.T
 
 def train_step(data_loader, X, Y, X_ref):
     """
@@ -579,11 +595,10 @@ def train_step(data_loader, X, Y, X_ref):
     train_err = 0.0
     YP = []
     T_target = []
-    for i, (x, y) in enumerate(data_loader):
+    for i, (x, y) in enumerate(tqdm(data_loader)):
         opt.zero_grad()
         x_seq = seq_enc(float_tensor(X_ref))
         x_feat = feat_enc(x)
-        pu.db
         loss, yp, _ = fnp_enc(x_seq, float_tensor(X_ref), x_feat, y)
         yp = yp[X_ref.shape[0] :]
         loss.backward()
@@ -614,7 +629,7 @@ def val_step(data_loader, X, Y, X_ref, sample=True):
         all_vars = []
         all_As = []
         # load_model("/localscratch/ssinha97/"+disease+"power_models")
-        for i, (x, y) in enumerate(data_loader):
+        for i, (x, y) in enumerate(tqdm(data_loader)):
             x_seq = seq_enc(float_tensor(X_ref))
             x_feat = feat_enc(x)
             yp, _, vars, _, _, _, A = fnp_enc.predict(
@@ -710,13 +725,13 @@ for ep in range(epochs):
         min_val_err = val_err
         min_val_epoch = ep
         try:
-            save_model("/nvmescratch/ssinha97/"+disease+"power_models")
+            save_model("/nvmescratch/ssinha97/"+disease+"traffic_models")
         except:
-            save_model("/localscratch/ssinha97/"+disease+"power_models")
+            save_model("/localscratch/ssinha97/"+disease+"traffic_models")
         print("Saved model")
     print()
     print()
-    if ep > 100 and ep - min_val_epoch > patience:
+    if ep > 20 and ep - min_val_epoch > patience:
         break
 
 if options.sliding_window:
@@ -730,24 +745,26 @@ else:
         pickle.dump(all_results, f)
     print("Saved val data at "+"/localscratch/ssinha97/fnp_evaluations/"+disease+"_val_predictions_normal/"+str(save_model_name)+"_predictions.pkl")
 
-"""
+# """
 # Now we get results
 try:
-    load_model("/nvmescratch/ssinha97/"+disease+"power_models")
+    load_model("/nvmescratch/ssinha97/"+disease+"traffic_models")
 except:
-    load_model("/localscratch/ssinha97/"+disease+"power_models")
-Y_pred, As = test_step(X_test, X_ref, samples=2000)
+    load_model("/localscratch/ssinha97/"+disease+"traffic_models")
+Y_pred, As = test_step(X_test, X_ref, samples=10)
 Y_pred = Y_pred.squeeze()
-Y_pred_unnorm = scaler.inverse_transform_idx(Y_pred, label_idx)
-X_test_unnorm = scaler.inverse_transform_idx(X_test, label_idx)
-Y_test_unnorm = scaler.inverse_transform_idx(Y_test, label_idx)
+Y_pred_unnorm = scaler.inverse_transform_idx(Y_pred, label_idxs_test)
+X_test_unnorm = scaler.inverse_transform_idx(X_test[:, :, label_idxs_test], label_idxs_test)
+Y_test_unnorm = scaler.inverse_transform_idx(Y_test, label_idxs_test)
 # Save predictions
 if options.sliding_window:
-    os.makedirs(f"./"+disease+"_power_stable_predictions_slidingwindow", exist_ok=True)
-    with open(f"./"+disease+"_power_stable_predictions_slidingwindow/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
-        pickle.dump([Y_pred_unnorm, Y_test_unnorm, X_test_unnorm[:, :, label_idx], As], f)
+    os.makedirs(f"./"+disease+"_traffic_stable_predictions_slidingwindow", exist_ok=True)
+    with open(f"./"+disease+"_traffic_stable_predictions_slidingwindow/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
+        pickle.dump([Y_pred_unnorm, Y_test_unnorm, X_test_unnorm, As], f)
+    print("Saved test results at "+"./"+disease+"_traffic_stable_predictions_slidingwindow/"+str(save_model_name)+"_predictions.pkl")
 else:
-    os.makedirs(f"./"+disease+"_power_stable_predictions", exist_ok=True)
-    with open(f"./"+disease+"_power_stable_predictions/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
-        pickle.dump([Y_pred_unnorm, Y_test_unnorm, X_test_unnorm[:, :, label_idx], As], f)
-"""
+    os.makedirs(f"./"+disease+"_traffic_stable_predictions", exist_ok=True)
+    with open(f"./"+disease+"_traffic_stable_predictions/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
+        pickle.dump([Y_pred_unnorm, Y_test_unnorm, X_test_unnorm, As], f)
+    print("Saved test results at "+"./"+disease+"_traffic_stable_predictions/"+str(save_model_name)+"_predictions.pkl")
+# """

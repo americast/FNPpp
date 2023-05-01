@@ -11,6 +11,8 @@ parser.add_option("--epochs", dest="epochs", default=300, type="int")
 parser.add_option("--seed", dest="seed", default=0, type="int")
 parser.add_option("--cnn", dest="cnn", action="store_true", default=False)
 parser.add_option("--rag", dest="rag", action="store_true", default=False)
+parser.add_option("--nn", dest="nn", default="none", type="choice", choices=["none", "simple", "bn", "dot", "bert"])
+parser.add_option("--bert", dest="bert", action="store_true", default=False)
 
 # epiweeks = list(range(202101, 202153))
 (options, args) = parser.parse_args()
@@ -125,13 +127,18 @@ for pat in patience:
                     if options.cnn:
                         save_model = "cnn_"+save_model
                         to_run = to_run +["--cnn"]
-
                     elif options.rag:
                         save_model = "rag_"+save_model
                         to_run = to_run +["--rag"]
-
+                    elif options.nn != "none":
+                        save_model = "nn-"+options.nn + "_" + save_model
+                        to_run = to_run + ["--nn", options.nn]
                     else:
                         save_model = "normal_"+save_model
+                    
+                    if options.bert:
+                        save_model = "bert_" + save_model
+                        to_run = to_run + ["--bert-emb", options.nn]
 
                     if options.seed != 0:
                         save_model = save_model + "_seed_"+str(options.seed)
