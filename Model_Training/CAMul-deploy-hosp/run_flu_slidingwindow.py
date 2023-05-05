@@ -9,6 +9,7 @@ parser.add_option("--epiweek_end", dest="epiweek_end", default="202310", type="s
 parser.add_option("-d", "--disease", dest="disease", default="flu", type="string")
 parser.add_option("--epochs", dest="epochs", default=300, type="int")
 parser.add_option("--auto-size-best-num", dest="auto_size_best_num", default=None, type="int")
+parser.add_option("--smart-mode", dest="smart_mode", default=0, type="int")
 parser.add_option("--size", dest="window_size", type="int", default=10)
 parser.add_option("--stride", dest="window_stride", type="int", default=10)
 parser.add_option("--preprocess", dest="preprocess", action="store_true", default=False)
@@ -96,9 +97,9 @@ states = [
 # sample_out = [True, False]
 sample_out = [True]
 # lr = [0.001, 0.0001]
-lr = [0.001]
+lr = [0.0001]
 # patience = [1000, 3000]
-patience = [500]
+patience = [50]
 ahead = [1,2,3]
 # ahead = [4]
 
@@ -126,9 +127,13 @@ for pat in patience:
                         to_run = ["--rag"] + to_run
                     if options.auto_size_best_num is not None:
                         to_run = ["--auto-size-best-num", str(options.auto_size_best_num)] + to_run
+                    elif options.smart_mode != 0:
+                        save_model = save_model + "_smart-mode_"+str(options.smart_mode)
+                        to_run = to_run +["--smart-mode", str(options.smart_mode)]
                     if options.seed != 0:
                         save_model = save_model + "_seed_"+str(options.seed)
                         to_run = to_run +["--seed", str(options.seed)]
+
                     print(f"Training {save_model}")
                     
                     to_run =  [

@@ -407,16 +407,18 @@ def moving_avg(x, kernel_size=25):
     return np.array(x[0][0])
 
 X_ref = np.expand_dims(X_ref, axis=0)
+X_ref = X_ref.T
 if options.sliding_window:
     if options.auto_size_best_num is not None:
-        lags = [x for x in range(100,1200,100)]
+        # pu.db
+        lags = [x for x in range(10,50)]
         # for x in range(5,10:
         #     lags.append(2**x)
         idx_scores = [0 for x in range(len(lags))]
         to_concat = []
         seq_lengths = []
-        for st_idx in tqdm(range(7)):
-            series_here = X_ref[0, :, st_idx]
+        for st_idx in tqdm(range(862)):
+            series_here = X_ref[st_idx, : ,0]
             series_here = series_here - moving_avg(series_here)
             acs = []
             for lag in lags:
@@ -425,33 +427,35 @@ if options.sliding_window:
                     ac_here.append(series_here[it] * series_here[it - lag])
                 acs.append(np.mean(np.array(ac_here)))
             sorted_indices = np.flip(np.argsort(acs)).tolist()
-            lag_needed = lags[sorted_indices[options.auto_size_best_num]]
-            for w in range(0, X_ref.shape[1] - lag_needed + 1, lag_needed):
-                seq_lengths.append(lag_needed)
-                to_concat.append(X_ref[:,w:w + lag_needed, :])
+            for k, sindxs in enumerate(sorted_indices):
+                idx_scores[sindxs] += len(lags) - k
+
+        lags_needed_idxs = np.flip(np.argsort(idx_scores)).tolist()
+        ilk = lags[lags_needed_idxs[options.auto_size_best_num]]
+        ils = lags[lags_needed_idxs[options.auto_size_best_num]]
 
 
             # for k, sindxs in enumerate(sorted_indices):
             #     seq_lengths.append(lag_needed)
             #     idx_scores[sindxs] += len(lags) - k
 
-        max_length = np.max(seq_lengths)
-        # pu.db
-        for t, tc in enumerate(to_concat):
-            len_here = tc.shape[1]
-            diff_len = max_length - len_here
-            to_concat[t] = np.concatenate([to_concat[t], np.zeros((1,diff_len,7))], axis=1)
-        # pu.db
-        X_ref = np.concatenate(to_concat)
-        to_choose = []
-        for k in range(0,X_ref.shape[0],5):
-            to_choose.append(k)
-        X_ref = X_ref[to_choose]
-        to_choose = []
-        for k in range(0,X_ref.shape[1],5):
-            to_choose.append(k)
-        X_ref = X_ref[:,to_choose,:]
-        ilk = ils = X_ref.shape[1]
+        # max_length = np.max(seq_lengths)
+        # # pu.db
+        # for t, tc in enumerate(to_concat):
+        #     len_here = tc.shape[1]
+        #     diff_len = max_length - len_here
+        #     to_concat[t] = np.concatenate([to_concat[t], np.zeros((1,diff_len,7))], axis=1)
+        # # pu.db
+        # X_ref = np.concatenate(to_concat)
+        # to_choose = []
+        # for k in range(0,X_ref.shape[0],5):
+        #     to_choose.append(k)
+        # X_ref = X_ref[to_choose]
+        # to_choose = []
+        # for k in range(0,X_ref.shape[1],5):
+        #     to_choose.append(k)
+        # X_ref = X_ref[:,to_choose,:]
+        # ilk = ils = X_ref.shape[1]
 
         # lags_needed_idxs = np.flip(np.argsort(idx_scores)).tolist()
         # ilk = lags[lags_needed_idxs[options.auto_size_best_num]]
@@ -462,8 +466,8 @@ if options.sliding_window:
         ils = options.window_stride
     # """
         to_concat = []
-        for w in range(0, X_ref.shape[1] - ilk + 1, options.window_stride):
-            to_concat.append(X_ref[:,w:w + ilk])
+        for w in range(0, X_ref.shape[1] - ilk + 1, ils):
+            to_concat.append(X_ref[:,w:w + ilk, :])
         
         X_ref_orig_shape = X_ref.shape
         X_ref = np.concatenate(to_concat)
@@ -582,7 +586,6 @@ opt = torch.optim.Adam(
     lr=lr,
 )
 
-X_ref = X_ref.T
 
 def train_step(data_loader, X, Y, X_ref):
     """
@@ -758,13 +761,13 @@ X_test_unnorm = scaler.inverse_transform_idx(X_test[:, :, label_idxs_test], labe
 Y_test_unnorm = scaler.inverse_transform_idx(Y_test, label_idxs_test)
 # Save predictions
 if options.sliding_window:
-    os.makedirs(f"./"+disease+"_traffic_stable_predictions_slidingwindow", exist_ok=True)
-    with open(f"./"+disease+"_traffic_stable_predictions_slidingwindow/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
+    os.makedirs(f"/localscratch/ssinha97/fnp_evaluations/"+disease+"_traffic_stable_predictions_slidingwindow", exist_ok=True)
+    with open(f"/localscratch/ssinha97/fnp_evaluations/"+disease+"_traffic_stable_predictions_slidingwindow/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
         pickle.dump([Y_pred_unnorm, Y_test_unnorm, X_test_unnorm, As], f)
-    print("Saved test results at "+"./"+disease+"_traffic_stable_predictions_slidingwindow/"+str(save_model_name)+"_predictions.pkl")
+    print("Saved test results at "+"/localscratch/ssinha97/fnp_evaluations/"+disease+"_traffic_stable_predictions_slidingwindow/"+str(save_model_name)+"_predictions.pkl")
 else:
-    os.makedirs(f"./"+disease+"_traffic_stable_predictions", exist_ok=True)
-    with open(f"./"+disease+"_traffic_stable_predictions/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
+    os.makedirs(f"/localscratch/ssinha97/fnp_evaluations/"+disease+"_traffic_stable_predictions", exist_ok=True)
+    with open(f"/localscratch/ssinha97/fnp_evaluations/"+disease+"_traffic_stable_predictions/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
         pickle.dump([Y_pred_unnorm, Y_test_unnorm, X_test_unnorm, As], f)
-    print("Saved test results at "+"./"+disease+"_traffic_stable_predictions/"+str(save_model_name)+"_predictions.pkl")
+    print("Saved test results at "+"/localscratch/ssinha97/fnp_evaluations/"+disease+"_traffic_stable_predictions/"+str(save_model_name)+"_predictions.pkl")
 # """

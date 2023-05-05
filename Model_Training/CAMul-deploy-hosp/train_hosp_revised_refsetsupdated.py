@@ -23,12 +23,13 @@ from models.fnpmodels import RegressionFNP2
 from tqdm import tqdm
 from itertools import product
 from transformers import BertModel, BertConfig, BertTokenizer, pipeline, get_scheduler, BertForSequenceClassification, InformerConfig, InformerModel
+from scipy.signal import argrelextrema
 
 parser = OptionParser()
 parser.add_option("-p", "--epiweek_pres", dest="epiweek_pres", default="202310", type="string")
 parser.add_option("-e", "--epiweek", dest="epiweek", default="202232", type="string")
 parser.add_option("--epochs", dest="epochs", default=3500, type="int")
-parser.add_option("--lr", dest="lr", default=6e-4, type="float")
+parser.add_option("--lr", dest="lr", default=6e-5, type="float")
 parser.add_option("--patience", dest="patience", default=1000, type="int")
 parser.add_option("-d", "--day", dest="day_ahead", default=1, type="int")
 parser.add_option("-s", "--seed", dest="seed", default=0, type="int")
@@ -48,6 +49,7 @@ parser.add_option("--cnn", dest="cnn", action="store_true", default=False)
 parser.add_option("--rag", dest="rag", action="store_true", default=False)
 parser.add_option("--nn", dest="nn", default="none", type="choice", choices=["none", "simple", "bn", "dot", "bert"])
 parser.add_option("--bert-emb", dest="bert_emb", action="store_true", default=False)
+parser.add_option("--smart-mode", dest="smart_mode", default=0, type="int")
 
 (options, args) = parser.parse_args()
 epiweek_pres = options.epiweek_pres
@@ -343,9 +345,9 @@ def batched_compute_pcc(x, y):
     # var_y = sum([(b - mean_y) ** 2 for b in y])
     return (cov / (torch.sqrt(var_x)+1e-6)) / (torch.sqrt(var_y)+1e-6)
 
-kernel_size = 25
+kernel_size = 3
 avg = torch.nn.AvgPool1d(kernel_size=kernel_size, stride=1, padding=0)
-def moving_avg(x, kernel_size=25):
+def moving_avg(x, kernel_size=kernel_size):
     # padding on the both ends of time series
     front = x[0:1].repeat((kernel_size - 1) // 2)
     end = x[-1:].repeat((kernel_size - 1) // 2)
@@ -354,9 +356,105 @@ def moving_avg(x, kernel_size=25):
         x = avg(torch.tensor([[x]]))
     x = x.detach().numpy().tolist()
     return np.array(x[0][0])
+X_ref_average = np.zeros_like(X_ref)
+for i in range(51):
+    X_ref_average[i] = moving_avg(X_ref[i], kernel_size=kernel_size)
+
+# for i in tqdm(range(51)):
+#     state = states[i]
+#     plt.plot(X_ref_average[i, :])
+#     plt.savefig("flu ref "+str(state)+" avg "+str(kernel_size)+".png")
+#     plt.clf()
+
+# for i in tqdm(range(51)):
+#     state = states[i]
+#     plt.plot(X_ref[i, :])
+#     plt.savefig("flu ref "+str(state)+".png")
+#     plt.clf()
+
+kernel_size_2 = 5
+avg = torch.nn.AvgPool1d(kernel_size=kernel_size_2, stride=1, padding=0)
+def moving_avg(x, kernel_size=kernel_size_2):
+    # padding on the both ends of time series
+    front = x[0:1].repeat((kernel_size - 1) // 2)
+    end = x[-1:].repeat((kernel_size - 1) // 2)
+    x = np.concatenate([front, x, end]).tolist()
+    with torch.no_grad():
+        x = avg(torch.tensor([[x]]))
+    x = x.detach().numpy().tolist()
+    return np.array(x[0][0])
+X_ref_average_2 = np.zeros_like(X_ref)
+
+for i in range(51):
+    X_ref_average_2[i] = moving_avg(X_ref_average[i], kernel_size=kernel_size_2)
+
+for i in tqdm(range(51)):
+    state = states[i]
+    plt.plot(X_ref_average_2[i, :])
+    plt.savefig("flu ref "+str(state)+" avg "+str(kernel_size)+"_"+str(kernel_size_2)+".png")
+    plt.clf()
 
 if options.sliding_window:
-    if options.auto_size_best_num is not None:
+    if options.smart_mode == 1:
+        X_ref_orig_shape = X_ref.shape
+        to_concat = []
+        for i in range(len(states)):
+            series_here = X_ref_average_2[i]
+            minimas =  argrelextrema(series_here, np.less)[0]
+            derivative = np.diff(series_here)
+            split_idxs= [np.where(derivative!=0)[0][0]]
+            start_scan = split_idxs[0]
+            # if states[i] == "ID":
+            #     pu.db
+            for stop_scan in minimas.tolist()+[len(series_here)-1]:
+                vals = series_here[start_scan:stop_scan]
+                max_here = np.max(vals)
+                if max_here > 0:
+                    split_idxs.append(start_scan)
+                    split_idxs.append(stop_scan)
+                start_scan = stop_scan
+            print(states[i])
+            # print("mean "+str(np.mean(series_here)))
+            # print("std "+str(np.std(series_here)))
+            # print("mean+std "+str(np.mean(series_here) + np.std(series_here)))
+            if len(series_here) - 1 not in split_idxs:
+                split_idxs.append(len(series_here) - 1)
+            split_idxs_diffs = [100]+np.diff(split_idxs).tolist()
+            split_idxs = np.array(split_idxs)[np.array(split_idxs_diffs) >= 10].tolist()
+            # if states[i] == "AR":
+            #     pu.db
+
+            print(split_idxs)
+            # if states[i] == "AR":
+            #     pu.db
+            print("\n")
+            plt.plot(X_ref_average_2[i, :])
+            for si in split_idxs:
+                plt.axvline(si, color="red")
+            plt.savefig("flu ref "+str(states[i])+" avg "+str(kernel_size)+"_"+str(kernel_size_2)+" split.png")
+            plt.clf()
+            plt.plot(X_ref[i, :])
+            for si in split_idxs:
+                plt.axvline(si, color="red")
+            plt.savefig("flu ref "+str(states[i])+" avg "+str(kernel_size)+"_"+str(kernel_size_2)+" split orig.png")
+            plt.clf()
+            ci = 0
+            for si in split_idxs:
+                to_concat.append(X_ref[i, ci:si].tolist())
+                ci = si
+
+        max_len = 0
+        for tc in to_concat:
+            if len(tc) > max_len:
+                max_len = len(tc)
+        for t, tc in enumerate(to_concat):
+            to_concat[t] = np.expand_dims(np.array([-100 for x in range(max_len-len(tc))] + tc), axis=0)
+        X_ref = np.concatenate(to_concat)
+
+
+
+
+    elif options.auto_size_best_num is not None:
         lags = [x for x in range(4, 30)]
         idx_scores = [0 for x in range(len(lags))]
         for st_idx, st_here in zip(states_to_consider_indices, states_to_consider):
@@ -379,12 +477,13 @@ if options.sliding_window:
         ilk = options.window_size
         ils = options.window_stride
     # """
-    to_concat = []
-    for w in range(0, X_ref.shape[1] - ilk + 1, ils):
-        to_concat.append(X_ref[:,w:w + ilk])
-    
-    X_ref_orig_shape = X_ref.shape
-    X_ref = np.concatenate(to_concat)
+    if options.smart_mode == 0:
+        to_concat = []
+        for w in range(0, X_ref.shape[1] - ilk + 1, ils):
+            to_concat.append(X_ref[:,w:w + ilk])
+        
+        X_ref_orig_shape = X_ref.shape
+        X_ref = np.concatenate(to_concat)
     
     if options.preprocess:
         all_idxs = np.zeros((X_ref.shape[0], X_train.shape[0], X_ref.shape[1]+X_train.shape[1]))
@@ -398,7 +497,7 @@ if options.sliding_window:
         X_ref = X_ref[best_ref_idxs, :]
         # pu.db
 
-
+# pu.db
 # Build model
 if options.bert_emb:
     # My method
