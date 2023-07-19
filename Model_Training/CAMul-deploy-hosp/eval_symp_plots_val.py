@@ -19,6 +19,8 @@ parser.add_option("-m", "--model_type", dest="model_type", default="normal", typ
 parser.add_option("--size", dest="window_size", default=10, type="int")
 parser.add_option("--stride", dest="window_stride", default=10, type="int")
 parser.add_option("--seed", dest="seed", default=0, type="int")
+parser.add_option("-y", "--year", dest="year", type="int", default=2020)
+
 # parser.add_option("-f", "--files", dest="file_names", default="sliding_model_"+str(options.epiweek)+"_True_0.001_500_4", type="string")
 # parser.add_option("-f", "--files", dest="file_names", default="sliding_model_"+str(options.epiweek)+"_True_0.001_500_4", type="string")
 # parser.add_option("-s", "--state", dest="state", default="AR", type="string")
@@ -30,7 +32,7 @@ states = [
 all_yps = []
 all_devs = []
 all_yts = []
-
+year = options.year
 if options.model_type == "all":
     model_types = ["slidingwindow_autosize_0", "slidingwindow_rag_autosize_0", "slidingwindow_autosize_1", "normal"]
     sizes = []
@@ -90,7 +92,9 @@ for mt, model_type in enumerate(tqdm(model_types)):
                 elif "nn-bert" in model_type:
                     save_model = "nn-bert_"+save_model
         else:
-            save_model = "disease_symp_weekahead_"+str(ah)
+            save_model = "disease_symp_weekahead_"+str(ah)+"_year_"+str(year)
+            if "smart-mode" in model_type:
+                save_model += "_smart-mode-"+str(model_type[-1])
             if "cnn" in model_type:
                 save_model = "cnn_"+save_model
             elif "rag" in model_type:
@@ -104,7 +108,8 @@ for mt, model_type in enumerate(tqdm(model_types)):
                     save_model = "nn-dot_"+save_model
                 elif "nn-bert" in model_type:
                     save_model = "nn-bert_"+save_model
-            else:
+            
+            if "smart-mode" not in model_type:
                 save_model = "normal_"+save_model
         
         if options.seed != 0:
@@ -127,23 +132,26 @@ for mt, model_type in enumerate(tqdm(model_types)):
         
         file_to_load = save_model + "_predictions.pkl"
         if "slidingwindow" in model_type or "preprocess" in model_type:
-            directory = "./"+disease_here+"_val_predictions_slidingwindow"
+            directory = "/localscratch/ssinha97/fnp_evaluations/"+disease_here+"_val_predictions_slidingwindow"
         else:
-            directory = "./"+disease_here+"_val_predictions_normal"
+            directory = "/localscratch/ssinha97/fnp_evaluations/symp_val_predictions_normal"
         with open(directory+"/"+file_to_load, "rb") as f:
             data_pickle = pickle.load(f)
 
         rmse_min = np.inf
         # pu.db
         for key in data_pickle.keys():
-            yp = data_pickle[list(data_pickle.keys())[key]]["pred"].tolist()
-            y  = data_pickle[list(data_pickle.keys())[key]]["gt"].tolist()
-            v  = data_pickle[list(data_pickle.keys())[key]]["vars"]
+            try:
+                yp = data_pickle[key]["pred"].tolist()
+                y  = data_pickle[key]["gt"].tolist()
+            except:
+                pu.db
+            # v  = data_pickle[list(data_pickle.keys())[key]]["vars"]
             rmse_here_inloop = rmse(np.array(yp), np.array(y))
             if rmse_here_inloop < rmse_min:
                 yp_to_consider = yp
                 y_to_consider = y
-                v_to_consider = v
+                # v_to_consider = v
                 rmse_min = rmse_here_inloop
 
         # As = []
@@ -162,15 +170,15 @@ for mt, model_type in enumerate(tqdm(model_types)):
 
         yp_this_week.extend(yp_to_consider)
         y_this_week.extend(y_to_consider)
-        v_this_week.extend(v_to_consider)
+        # v_this_week.extend(v_to_consider)
 
     rmse_here = rmse(np.array(yp_this_week), np.array(y_this_week))
     crps_here = crps_samples(np.array(yp_this_week),  np.array(y_this_week))
     # pu.db
-    conf_score = get_pr(np.array(yp_this_week), np.array(v_this_week), np.array(y_this_week))[1]
+    # conf_score = get_pr(np.array(yp_this_week), np.array(v_this_week), np.array(y_this_week))[1]
     rmse_all.append(np.mean(rmse_here))
     crps_all.append(np.mean(crps_here))
-    conf_all.append(np.mean(conf_score))
+    # conf_all.append(np.mean(conf_score))
 
 # pu.db
 # pu.db
@@ -178,8 +186,8 @@ rmse_min = np.min(rmse_all, where=True)
 poses_1 = np.argmin(rmse_all)
 crps_min = np.min(crps_all, where=True)
 poses_2 = np.argmin(crps_all)
-conf_max = np.max(crps_all, where=True)
-poses_3 = np.argmax(conf_all)
+# conf_max = np.max(crps_all, where=True)
+# poses_3 = np.argmax(conf_all)
 
 print("RMSE min: "+str(rmse_min))
 print(model_types[poses_1])
@@ -201,5 +209,5 @@ print(rmse_all)
 print("\nall_crps")
 print(crps_all)
 
-print("\nall_conf")
-print(conf_all)
+# print("\nall_conf")
+# print(conf_all)

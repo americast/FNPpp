@@ -13,8 +13,8 @@ import matplotlib.pyplot as plt
 import sys
 
 parser = OptionParser()
-parser.add_option("-s", "--epiweek-start", dest="epiweek_start", default="202232", type="string")
-parser.add_option("-e", "--epiweek-end", dest="epiweek_end", default="202306", type="string")
+parser.add_option("-s", "--epiweek-start", dest="epiweek_start", default="202132", type="string")
+parser.add_option("-e", "--epiweek-end", dest="epiweek_end", default="202206", type="string")
 parser.add_option("-m", "--model_type", dest="model_type", default="normal", type="string") # normal, cnn, slidingwindow, preprocess, slidingwindow_cnn, rag, slidingwindow_rag
 parser.add_option("--size", dest="window_size", default=10, type="int")
 parser.add_option("--stride", dest="window_stride", default=10, type="int")
@@ -58,8 +58,8 @@ for mt, model_type in enumerate(tqdm(model_types)):
 
     weekwise_data = [] # list of lists of lists with each element of weekwise_data being [ahead_wise_week_yps, aheadwise_week_devs, aheadwise_week_yts]
 
-    if "2023" in options.epiweek_end:
-        epiweeks = list(range(int(options.epiweek_start), 202252)) + list(range(202301, int(options.epiweek_end)))
+    if "2022" in options.epiweek_end:
+        epiweeks = list(range(int(options.epiweek_start), 202152)) + list(range(202201, int(options.epiweek_end)))
     else:
         epiweeks = list(range(int(options.epiweek_start), int(options.epiweek_end)))
 
@@ -80,14 +80,14 @@ for mt, model_type in enumerate(tqdm(model_types)):
         for ah in week_ahead:
             if "slidingwindow" in model_type or "preprocess" in model_type:
                 if "autosize" in model_type:
-                    save_model = f"slidingwindow_disease_"+str(options.disease)+"_epiweek_"+str(epiweek)+"_weekahead_"+str(ah)+"_autosize_"+str(model_type[-1])
+                    save_model = f"slidingwindow_ps_disease_"+str(options.disease)+"_epiweek_"+str(epiweek)+"_weekahead_"+str(ah)+"_autosize_"+str(model_type[-1])
                 elif "smart-mode" in model_type:
-                    save_model = f"slidingwindow_disease_"+str(options.disease)+"_epiweek_"+str(epiweek)+"_weekahead_"+str(ah)+"_smart-mode-"+str(model_type[-1])
+                    save_model = f"slidingwindow_ps_disease_"+str(options.disease)+"_epiweek_"+str(epiweek)+"_weekahead_"+str(ah)+"_smart-mode-"+str(model_type[-1])
                 else:
-                    save_model = f"slidingwindow_disease_"+str(options.disease)+"_epiweek_"+str(epiweek)+"_weekahead_"+str(ah)+"_wsize_"+str(sizes[mt])+"_wstride_"+str(strides[mt])
+                    save_model = f"slidingwindow_ps_disease_"+str(options.disease)+"_epiweek_"+str(epiweek)+"_weekahead_"+str(ah)+"_wsize_"+str(sizes[mt])+"_wstride_"+str(strides[mt])
 
                 if "preprocess" in model_type:
-                    save_model = f"slidingwindowpreprocessed_disease_"+str(options.disease)+"_epiweek_"+str(epiweek)+"_weekahead_"+str(ah)+"_wsize_"+str(sizes[mt])+"_wstride_"+str(strides[mt])
+                    save_model = f"slidingwindowpreprocessed_ps_disease_"+str(options.disease)+"_epiweek_"+str(epiweek)+"_weekahead_"+str(ah)+"_wsize_"+str(sizes[mt])+"_wstride_"+str(strides[mt])
                 
                 if "cnn" in model_type:
                     save_model = "cnn_" + save_model
@@ -103,7 +103,7 @@ for mt, model_type in enumerate(tqdm(model_types)):
                     elif "nn-bert" in model_type:
                         save_model = "nn-bert_"+save_model
             else:
-                save_model = "disease_"+str(options.disease)+"_epiweek_"+str(epiweek)+"_weekahead_"+str(ah)
+                save_model = "ps_disease_"+str(options.disease)+"_epiweek_"+str(epiweek)+"_weekahead_"+str(ah)
                 if "smart-mode" in model_type:
                     save_model += "_smart-mode-"+str(model_type[-1])
                 if "cnn" in model_type:

@@ -23,6 +23,7 @@ from models.fnpmodels import RegressionFNP2
 from tqdm import tqdm
 from itertools import product
 from datasets import load_dataset
+from scipy.signal import argrelextrema
 
 parser = OptionParser()
 # parser.add_option("-p", "--epiweek_pres", dest="epiweek_pres", default="202240", type="string")
@@ -32,7 +33,7 @@ parser.add_option("--lr", dest="lr", default=1e-4, type="float")
 parser.add_option("--patience", dest="patience", default=1000, type="int")
 parser.add_option("-d", "--day", dest="day_ahead", default=1, type="int")
 parser.add_option("-s", "--seed", dest="seed", default=0, type="int")
-parser.add_option("-b", "--batch", dest="batch_size", default=128, type="int")
+parser.add_option("-b", "--batch", dest="batch_size", default=12288, type="int")
 parser.add_option("-m", "--save", dest="save_model", default="default", type="string")
 parser.add_option("--start_model", dest="start_model", default="None", type="string")
 parser.add_option("-c", "--cuda", dest="cuda", default=True, action="store_true")
@@ -47,6 +48,7 @@ parser.add_option("--preprocess", dest="preprocess", action="store_true", defaul
 parser.add_option("--cnn", dest="cnn", action="store_true", default=False)
 parser.add_option("--rag", dest="rag", action="store_true", default=False)
 parser.add_option("--nn", dest="nn", default="none", type="choice", choices=["none", "simple", "bn", "dot", "bert"])
+parser.add_option("--smart-mode", dest="smart_mode", default=0, type="int")
 
 (options, args) = parser.parse_args()
 # epiweek_pres = options.epiweek_pres
@@ -327,9 +329,48 @@ features_traffic_test = np.array(features_traffic_test).T
 # features = np.concatenate([features_traffic_train, features_traffic_validation, features_traffic_test], axis=0)
 features = np.expand_dims(features_traffic_test, axis = 0)
 # pu.db
+if options.smart_mode == 5 or options.smart_mode == 8:
+    features_avg = np.zeros_like(features)
+    kernel_size = 3
+    avg = torch.nn.AvgPool1d(kernel_size=kernel_size, stride=1, padding=0)
+    def moving_avg(x, kernel_size=kernel_size):
+        # padding on the both ends of time series
+        front = x[0:1].repeat((kernel_size - 1) // 2)
+        end = x[-1:].repeat((kernel_size - 1) // 2)
+        x = np.concatenate([front, x, end]).tolist()
+        with torch.no_grad():
+            # if options.smart_mode == 7:
+            #     x = conv_here_1(torch.tensor([[x]]))
+            # else:
+                x = avg(torch.tensor([[x]]))
+        x = x.detach().numpy().tolist()
+        return np.array(x[0][0])
+    for i, rw in enumerate(features[0]):
+        rw_here = moving_avg(rw)
+        features_avg[0, i] = rw_here
+    kernel_size = 5
+    avg = torch.nn.AvgPool1d(kernel_size=kernel_size, stride=1, padding=0)
+    def moving_avg(x, kernel_size=kernel_size):
+        # padding on the both ends of time series
+        front = x[0:1].repeat((kernel_size - 1) // 2)
+        end = x[-1:].repeat((kernel_size - 1) // 2)
+        x = np.concatenate([front, x, end]).tolist()
+        with torch.no_grad():
+            # if options.smart_mode == 7:
+            #     x = conv_here_2(torch.tensor([[x]]))
+            # else:
+                x = avg(torch.tensor([[x]]))
+        x = x.detach().numpy().tolist()
+        return np.array(x[0][0])
+    for i, rw in enumerate(features_avg[0]):
+        rw_here = moving_avg(rw)
+        features_avg[0, i] = rw_here
+    # pu.db
 scaler = ScalerFeat(features)
 features = scaler.transform(features)
 features = np.squeeze(features, axis=0)
+# features_avg = scaler.transform(features_avg)
+# features_avg = np.squeeze(features_avg, axis=0)
 # target = features[:, 0]
 target = features
 
@@ -345,7 +386,10 @@ def sample_train(window = 20):
     for start_seq in tqdm(start_seqs):
         # X.append(target[start_seq:start_seq+window, np.newaxis])
         for traffic_row in range(traffic_rows):
-            X.append(features[start_seq:start_seq+window])
+            if options.smart_mode == 5 or options.smart_mode == 8:
+                X.append(features_avg[start_seq:start_seq+window])
+            else:
+                X.append(features[start_seq:start_seq+window])
             Y.append(features[start_seq+window+(options.day_ahead - 1), traffic_row])
         # mt.append(month[start_seq+window])
         # reg.append(tod[start_seq+window])
@@ -361,7 +405,10 @@ def sample_val(window = 20):
     start_seqs = list(range(val_start - (window + options.day_ahead), val_end - (window + options.day_ahead)))
     for start_seq in tqdm(start_seqs):
         for traffic_row in range(traffic_rows):
-            X.append(features[start_seq:start_seq+window])
+            if options.smart_mode == 5 or options.smart_mode == 8:
+                X.append(features_avg[start_seq:start_seq+window])
+            else:
+                X.append(features[start_seq:start_seq+window])
             Y.append(features[start_seq+window+(options.day_ahead - 1), traffic_row])
     X = np.array(X)
     Y = np.array(Y)
@@ -372,7 +419,10 @@ def sample_test(window = 20):
     start_seqs = list(range(val_end - (window + options.day_ahead), total_time-(window + (options.day_ahead))))
     for start_seq in tqdm(start_seqs):
         for traffic_row in range(traffic_rows):
-            X.append(features[start_seq:start_seq+window])
+            if options.smart_mode == 5 or options.smart_mode == 8:
+                X.append(features_avg[start_seq:start_seq+window])
+            else:
+                X.append(features[start_seq:start_seq+window])
             Y.append(features[start_seq+window+(options.day_ahead - 1), traffic_row])
             label_idxs.append(traffic_row)
     X = np.array(X)
@@ -408,8 +458,78 @@ def moving_avg(x, kernel_size=25):
 
 X_ref = np.expand_dims(X_ref, axis=0)
 X_ref = X_ref.T
-if options.sliding_window:
-    if options.auto_size_best_num is not None:
+if options.sliding_window or options.smart_mode == 8:
+    # if options.smart_mode == 8:
+    #     X_ref_orig_shape = X_ref.shape
+    #     to_concat = []
+    #     to_concat_weeks = []
+    #     # pu.db
+    #     for i in range(X_ref_orig_shape[0]):
+    #         # pu.db
+    #         # if options.smart_mode == 8:
+    #         #     series_here = raw_data_unavgd[i]
+    #         # else:
+    #         series_here = X_ref[i][:,0]
+    #         minimas =  argrelextrema(series_here, np.less)[0]
+    #         derivative = np.diff(series_here)
+    #         split_idxs= [np.where(derivative!=0)[0][0]]
+    #         start_scan = split_idxs[0]
+    #         # if states[i] == "ID":
+    #         for stop_scan in minimas.tolist()+[len(series_here)-1]:
+    #             vals = series_here[start_scan:stop_scan]
+    #             if len(vals) < 1:
+    #                 continue
+    #             max_here = np.max(vals)
+    #             if max_here > 0:
+    #                 split_idxs.append(start_scan)
+    #                 split_idxs.append(stop_scan)
+    #             start_scan = stop_scan
+    #         # print(states[i])
+    #         # print("mean "+str(np.mean(series_here)))
+    #         # print("std "+str(np.std(series_here)))
+    #         # print("mean+std "+str(np.mean(series_here) + np.std(series_here)))
+    #         if len(series_here) - 1 not in split_idxs:
+    #             split_idxs.append(len(series_here) - 1)
+    #         split_idxs_diffs = [100]+np.diff(split_idxs).tolist()
+    #         split_idxs = np.array(split_idxs)[np.array(split_idxs_diffs) >= 10].tolist()
+    #         # if states[i] == "AR":
+    #         #     pu.db
+
+    #         # Just to fit in GPU
+    #         if len(split_idxs) > 2:
+    #             split_idxs = [0, random.choice(split_idxs[1:-1])]
+    #         print(split_idxs)
+    #         # if states[i] == "AR":
+    #         #     pu.db
+    #         print("\n")
+    #         # plt.plot(X_ref_average_2[i, :])
+    #         # for si in split_idxs:
+    #         #     plt.axvline(si, color="red")
+    #         # plt.savefig("flu ref "+str(states[i])+" avg "+str(kernel_size)+"_"+str(kernel_size_2)+" split.png")
+    #         # plt.clf()
+    #         # plt.plot(X_ref[i, :])
+    #         # for si in split_idxs:
+    #         #     plt.axvline(si, color="red")
+    #         # plt.savefig("flu ref "+str(states[i])+" avg "+str(kernel_size)+"_"+str(kernel_size_2)+" split orig.png")
+    #         # plt.clf()
+
+            
+    #         ci = 0
+    #         for si in split_idxs:
+    #             to_concat.append(X_ref[i, ci:si, 0].tolist())
+    #             ci = si
+    #         to_concat.append(X_ref[i, :, 0].tolist())
+    #     max_len = 0
+    #     for tc in to_concat:
+    #         if len(tc) > max_len:
+    #             max_len = len(tc)
+    #     # pu.db
+    #     for t, tc in enumerate(to_concat):
+    #         to_concat[t] = np.expand_dims(np.array([-100 for x in range(max_len-len(tc))] + tc), axis=0)
+    #     X_ref = np.concatenate(to_concat)
+    #     X_ref = np.expand_dims(X_ref, axis=-1)
+    #     print(X_ref.shape)
+    if options.auto_size_best_num is not None or options.smart_mode == 8:
         # pu.db
         lags = [x for x in range(10,50)]
         # for x in range(5,10:
@@ -431,8 +551,12 @@ if options.sliding_window:
                 idx_scores[sindxs] += len(lags) - k
 
         lags_needed_idxs = np.flip(np.argsort(idx_scores)).tolist()
-        ilk = lags[lags_needed_idxs[options.auto_size_best_num]]
-        ils = lags[lags_needed_idxs[options.auto_size_best_num]]
+        if options.smart_mode == 8:
+            ilk = lags[0]
+            ils = lags[0]
+        else:
+            ilk = lags[lags_needed_idxs[options.auto_size_best_num]]
+            ils = lags[lags_needed_idxs[options.auto_size_best_num]]
 
 
             # for k, sindxs in enumerate(sorted_indices):
@@ -465,6 +589,7 @@ if options.sliding_window:
         ilk = options.window_size
         ils = options.window_stride
     # """
+        # pu.db
         to_concat = []
         for w in range(0, X_ref.shape[1] - ilk + 1, ils):
             to_concat.append(X_ref[:,w:w + ilk, :])
@@ -488,22 +613,41 @@ if options.sliding_window:
 # Build model
 feat_enc = GRUEncoder(in_size=862, out_dim=60,).to(device)
 seq_enc = GRUEncoder(in_size=1, out_dim=60,).to(device)
-fnp_enc = RegressionFNP2(
-    dim_x=60,
-    dim_y=1,
-    dim_h=100,
-    size_ref=X_ref.shape[0],
-    n_layers=3,
-    num_M=batch_size,
-    dim_u=60,
-    dim_z=60,
-    use_DAG=False,
-    use_ref_labels=False,
-    add_atten=False,
-    cnn=options.cnn,
-    rag=options.rag,
-    nn_A=options.nn
-).to(device)
+if options.smart_mode == 8:
+    fnp_enc = RegressionFNP2(
+        dim_x=60,
+        dim_y=1,
+        dim_h=100,
+        size_ref=X_ref.shape[0],
+        n_layers=3,
+        num_M=batch_size,
+        dim_u=60,
+        dim_z=60,
+        use_DAG=False,
+        use_ref_labels=False,
+        add_atten=False,
+        cnn=options.cnn,
+        rag=options.rag,
+        nn_A="bn"
+    ).to(device)
+
+else:
+    fnp_enc = RegressionFNP2(
+        dim_x=60,
+        dim_y=1,
+        dim_h=100,
+        size_ref=X_ref.shape[0],
+        n_layers=3,
+        num_M=batch_size,
+        dim_u=60,
+        dim_z=60,
+        use_DAG=False,
+        use_ref_labels=False,
+        add_atten=False,
+        cnn=options.cnn,
+        rag=options.rag,
+        nn_A=options.nn
+    ).to(device)
 
 
 def load_model(folder, file=save_model_name):
@@ -713,6 +857,7 @@ for ep in range(epochs):
     print("num refs: "+str(X_ref.shape[0]))
     if options.seed != 0:
         print("Seed: "+str(options.seed))
+    print("Min val err: "+str(min_val_err))
     print("---------------------------------------")
     train_loss, train_err, yp, yt = train_step(train_loader, X_train, Y_train, X_ref)
     print(f"Train loss: {train_loss:.4f}, Train err: {train_err:.4f}")

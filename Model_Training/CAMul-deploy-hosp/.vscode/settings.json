@@ -1,3 +1,4 @@
 {
-    "python.pythonPath": ".envs/epifnp/bin/python"
+    "python.pythonPath": ".envs/epifnp/bin/python",
+    "python.analysis.typeCheckingMode": "basic"
 }

@@ -4,7 +4,7 @@ from tqdm import tqdm
 from optparse import OptionParser
 import sys
 parser = OptionParser()
-parser.add_option("-d", "--disease", dest="disease", default="power", type="string")
+parser.add_option("-d", "--disease", dest="disease", default="traffic", type="string")
 parser.add_option("--epochs", dest="epochs", default=300, type="int")
 parser.add_option("--size", dest="window_size", type="int", default=128)
 parser.add_option("--stride", dest="window_stride", type="int", default=1000)
@@ -112,14 +112,16 @@ for pat in patience:
                     to_run = []
                     if options.auto_size_best_num is not None:
                         save_model = f"slidingwindow_disease_{options.disease}_weekahead_{ah}_autosize_{options.auto_size_best_num}"
-                    elif options.smart_mode != 0:
-                        save_model = f"slidingwindow_disease_{options.disease}_weekahead_{ah}_smart-mode-{options.smart_mode}"
                     else:
                         save_model = f"slidingwindow_disease_{options.disease}_weekahead_{ah}_wsize_{options.window_size}_wstride_{options.window_stride}"
 
                     if options.preprocess:
                         save_model = f"slidingwindowpreprocessed_disease_{options.disease}_weekahead_{ah}_wsize_{options.window_size}_wstride_{options.window_stride}"
                         to_run = ["--preprocess"] + to_run
+                    
+                    if options.smart_mode != 0:
+                        save_model += "_smart-mode-"+str(options.smart_mode)
+                        to_run = to_run +["--smart-mode", str(options.smart_mode)]
                     
                     if options.cnn:
                         save_model = "cnn_" + save_model
@@ -132,8 +134,6 @@ for pat in patience:
                         to_run = to_run + ["--nn", options.nn]
                     if options.auto_size_best_num is not None:
                         to_run = ["--auto-size-best-num", str(options.auto_size_best_num)] + to_run
-                    elif options.smart_mode != 0:
-                        to_run = to_run +["--smart-mode", str(options.smart_mode)]
                     if options.seed != 0:
                         save_model = save_model + "_seed_"+str(options.seed)
                         to_run = to_run +["--seed", str(options.seed)]
@@ -142,7 +142,7 @@ for pat in patience:
                     
                     to_run =  [
                                 "python",
-                                "train_power_revised_refsetsupdated.py",
+                                "train_traffic_revised_refsetsupdated.py",
                                 "--lr",
                                 str(lr_),
                                 "--save",
@@ -155,7 +155,7 @@ for pat in patience:
                                 str(ah),
                                 "--tb",
                                 "--disease",
-                                "power",
+                                "traffic",
                                 "-W",
                                 "--sliding-window-stride",
                                 str(options.window_stride),

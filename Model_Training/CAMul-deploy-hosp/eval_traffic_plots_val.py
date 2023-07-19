@@ -3,7 +3,7 @@ import os
 import pandas as pd
 import numpy as np
 from covid_extract.hosp_consts import states
-from eval_metrics import rmse, nrmse, mape, crps_samples, get_pr
+from eval_metrics import rmse, nrmse, mape, crps_samples, get_pr, pres_recall
 import pudb
 from torch.utils.tensorboard import SummaryWriter
 from optparse import OptionParser
@@ -19,6 +19,7 @@ parser.add_option("-m", "--model_type", dest="model_type", default="normal", typ
 parser.add_option("--size", dest="window_size", default=10, type="int")
 parser.add_option("--stride", dest="window_stride", default=10, type="int")
 parser.add_option("--seed", dest="seed", default=0, type="int")
+
 # parser.add_option("-f", "--files", dest="file_names", default="sliding_model_"+str(options.epiweek)+"_True_0.001_500_4", type="string")
 # parser.add_option("-f", "--files", dest="file_names", default="sliding_model_"+str(options.epiweek)+"_True_0.001_500_4", type="string")
 # parser.add_option("-s", "--state", dest="state", default="AR", type="string")
@@ -30,11 +31,10 @@ states = [
 all_yps = []
 all_devs = []
 all_yts = []
-
 if options.model_type == "all":
-    model_types = ["slidingwindow", "slidingwindow", "slidingwindow_autosize_0", "slidingwindow_rag_autosize_0"]
-    sizes = [1000, 128]
-    strides = [1000, 1000]
+    model_types = ["slidingwindow_autosize_0", "slidingwindow_rag_autosize_0", "slidingwindow_autosize_1", "normal"]
+    sizes = []
+    strides = []
 else:
     model_types = [options.model_type]
     sizes = [options.window_size]
@@ -61,22 +61,20 @@ for mt, model_type in enumerate(tqdm(model_types)):
     for state in states:
         plot_dict[state] = [None, None, None]  # [pred_mean, pred_stddev, label]
 
-    yp_this_week, y_this_week, v_this_week = [], [], []
+    yp_this_week, y_this_week, v_this_week  = [], [], []
     # counter = -1
     # rmse_this_week, crps_this_week = [], []
     for ah in week_ahead:
         if "slidingwindow" in model_type or "preprocess" in model_type:
             if "autosize" in model_type:
-                save_model = f"slidingwindow_disease_power_weekahead_"+str(ah)+"_autosize_"+str(model_type[-1])
-            elif "smart-mode" in model_type:
-                save_model = f"slidingwindow_disease_power_weekahead_"+str(ah)+"_smart-mode-"+str(model_type[-1])
+                save_model = f"slidingwindow_disease_traffic_weekahead_"+str(ah)+"_autosize_"+str(model_type[-1])
             else:
                 try:
-                    save_model = f"slidingwindow_disease_power_weekahead_"+str(ah)+"_wsize_"+str(sizes[mt])+"_wstride_"+str(strides[mt])
+                    save_model = f"slidingwindow_disease_traffic_weekahead_"+str(ah)+"_wsize_"+str(sizes[mt])+"_wstride_"+str(strides[mt])
                 except: pu.db
 
             if "preprocess" in model_type:
-                save_model = f"slidingwindowpreprocessed_disease_power_weekahead_"+str(ah)+"_wsize_"+str(sizes[mt])+"_wstride_"+str(strides[mt])
+                save_model = f"slidingwindowpreprocessed_disease_traffic_weekahead_"+str(ah)+"_wsize_"+str(sizes[mt])+"_wstride_"+str(strides[mt])
             
             if "cnn" in model_type:
                 save_model = "cnn_" + save_model
@@ -92,7 +90,7 @@ for mt, model_type in enumerate(tqdm(model_types)):
                 elif "nn-bert" in model_type:
                     save_model = "nn-bert_"+save_model
         else:
-            save_model = "disease_power_weekahead_"+str(ah)
+            save_model = "disease_traffic_weekahead_"+str(ah)
             if "smart-mode" in model_type:
                 save_model += "_smart-mode-"+str(model_type[-1])
             if "cnn" in model_type:
@@ -108,12 +106,14 @@ for mt, model_type in enumerate(tqdm(model_types)):
                     save_model = "nn-dot_"+save_model
                 elif "nn-bert" in model_type:
                     save_model = "nn-bert_"+save_model
-            else:
+            
+            if "nn" not in model_type:
                 save_model = "normal_"+save_model
+        
         if options.seed != 0:
             save_model = save_model + "_seed_"+str(options.seed)
 
-        disease_here = "power"
+        disease_here = "traffic"
         if "cnn" in model_type:
             disease_here = disease_here + "_cnn"
         if "rag" in model_type:
@@ -126,54 +126,66 @@ for mt, model_type in enumerate(tqdm(model_types)):
             elif "nn-dot" in model_type:
                 disease_here = disease_here + "_nn-dot"
             elif "nn-bert" in model_type:
-                disease_here = disease_here + "_nn-bert"
+                disease_here = disease_here + "nn-bert_"
         
         file_to_load = save_model + "_predictions.pkl"
         if "slidingwindow" in model_type or "preprocess" in model_type:
             directory = "/localscratch/ssinha97/fnp_evaluations/"+disease_here+"_val_predictions_slidingwindow"
         else:
-            directory = "/localscratch/ssinha97/fnp_evaluations/"+disease_here+"_val_predictions_normal"
+            directory = "/localscratch/ssinha97/fnp_evaluations/traffic_val_predictions_normal"
         with open(directory+"/"+file_to_load, "rb") as f:
             data_pickle = pickle.load(f)
 
         rmse_min = np.inf
         # pu.db
         for key in data_pickle.keys():
-            yp = data_pickle[list(data_pickle.keys())[key]]["pred"].tolist()
-            y  = data_pickle[list(data_pickle.keys())[key]]["gt"].tolist()
-            v  = data_pickle[list(data_pickle.keys())[key]]["vars"]
+            try:
+                yp = data_pickle[key]["pred"].tolist()
+                y  = data_pickle[key]["gt"].tolist()
+            except:
+                pu.db
+            # v  = data_pickle[list(data_pickle.keys())[key]]["vars"]
             rmse_here_inloop = rmse(np.array(yp), np.array(y))
             if rmse_here_inloop < rmse_min:
                 yp_to_consider = yp
                 y_to_consider = y
-                v_to_consider = v
+                # v_to_consider = v
                 rmse_min = rmse_here_inloop
-        
+
+        # As = []
+        # for a in range(0, len(list(data_pickle.keys())), 10):
+        #     A_here = data_pickle[list(data_pickle.keys())[a]]["As"][0]
+        #     # pu.db
+        #     plt.figure(a)
+        #     plt.imshow(A_here, cmap='viridis')
+        #     plt.colorbar()
+        #     plt.savefig("traffic_plot_"+str(a)+".png")
+        #     plt.close()
         # pu.db
         # yp_this_week
 
 
 
-
         yp_this_week.extend(yp_to_consider)
         y_this_week.extend(y_to_consider)
-        v_this_week.extend(v_to_consider)
-
+        # v_this_week.extend(v_to_consider)
 
     rmse_here = rmse(np.array(yp_this_week), np.array(y_this_week))
     crps_here = crps_samples(np.array(yp_this_week),  np.array(y_this_week))
-    conf_score = get_pr(np.array(yp_this_week), np.array(v_this_week), np.array(y_this_week))[1]
+    # pu.db
+    # conf_score = get_pr(np.array(yp_this_week), np.array(v_this_week), np.array(y_this_week))[1]
     rmse_all.append(np.mean(rmse_here))
     crps_all.append(np.mean(crps_here))
-    conf_all.append(np.mean(conf_score))
+    # conf_all.append(np.mean(conf_score))
 
+# pu.db
 # pu.db
 rmse_min = np.min(rmse_all, where=True)
 poses_1 = np.argmin(rmse_all)
 crps_min = np.min(crps_all, where=True)
 poses_2 = np.argmin(crps_all)
-conf_max = np.max(crps_all, where=True)
-poses_3 = np.argmax(conf_all)
+# conf_max = np.max(crps_all, where=True)
+# poses_3 = np.argmax(conf_all)
 
 print("RMSE min: "+str(rmse_min))
 print(model_types[poses_1])
@@ -195,8 +207,5 @@ print(rmse_all)
 print("\nall_crps")
 print(crps_all)
 
-print("\nall_conf")
-print(conf_all)
-
-print("best model: ")
-print(model_types[poses_1])
+# print("\nall_conf")
+# print(conf_all)

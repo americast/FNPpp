@@ -235,6 +235,7 @@ class CorrEncoder(nn.Module):
         hidden_dim: int,
         q_layers=1,
         same_decoder=True,
+        nn_A=None
     ):
         r"""
         ## Inputs
@@ -267,15 +268,25 @@ class CorrEncoder(nn.Module):
         self.pairwise_g_logscale = nn.Parameter(
             float_tensor(1).fill_(math.log(math.sqrt(self.hidden_dim)))
         )
-        self.pairwise_g = lambda x: logitexp(
-            -0.5
-            * torch.sum(
-                torch.pow(x[:, self.hidden_dim :] - x[:, 0 : self.hidden_dim], 2),
-                1,
-                keepdim=True,
-            )
-            / self.pairwise_g_logscale.exp()
-        ).view(x.size(0), 1)
+        if nn_A == "bn":
+            self.nn_z1 = nn.Linear(120,128)
+            self.nn_z2 = nn.Linear(128,1)
+            self.bn_1 = nn.BatchNorm1d(128)
+            self.bn_2 = nn.BatchNorm1d(1)
+            self.pairwise_g = lambda x: nn.Sequential(self.nn_z1,
+                        self.bn_1,
+                        self.nn_z2,
+                        self.bn_2)(x)/ (10*self.pairwise_g_logscale.exp())
+        else:
+            self.pairwise_g = lambda x: logitexp(
+                -0.5
+                * torch.sum(
+                    torch.pow(x[:, self.hidden_dim :] - x[:, 0 : self.hidden_dim], 2),
+                    1,
+                    keepdim=True,
+                )
+                / self.pairwise_g_logscale.exp()
+            ).view(x.size(0), 1)
 
         self.q_z = FFN(hidden_dim, [hidden_dim] * q_layers, hidden_dim * 2)
 

@@ -3,10 +3,9 @@ import pudb
 from tqdm import tqdm
 from optparse import OptionParser
 import sys
-import pudb
 parser = OptionParser()
-parser.add_option("--epiweek_start", dest="epiweek_start", default="202232", type="string")
-parser.add_option("--epiweek_end", dest="epiweek_end", default="202310", type="string")
+parser.add_option("--epiweek_start", dest="epiweek_start", default="202132", type="string")
+parser.add_option("--epiweek_end", dest="epiweek_end", default="202210", type="string")
 parser.add_option("-d", "--disease", dest="disease", default="flu", type="string")
 parser.add_option("--epochs", dest="epochs", default=500, type="int")
 parser.add_option("--seed", dest="seed", default=0, type="int")
@@ -14,7 +13,6 @@ parser.add_option("--cnn", dest="cnn", action="store_true", default=False)
 parser.add_option("--rag", dest="rag", action="store_true", default=False)
 parser.add_option("--nn", dest="nn", default="none", type="choice", choices=["none", "simple", "bn", "dot", "bert"])
 parser.add_option("--bert", dest="bert", action="store_true", default=False)
-parser.add_option("--fed", dest="fed", action="store_true", default=False)
 parser.add_option("--smart-mode", dest="smart_mode", default=0, type="int")
 
 # 1 divide ref sets as per new rule
@@ -24,11 +22,10 @@ parser.add_option("--smart-mode", dest="smart_mode", default=0, type="int")
 # 5 use smoothing for only inputs
 # 6 use smoothing for only ref sets
 # 7 conv for inp
-# 8 Ours (smooth + partition + nn-bn)
 # epiweeks = list(range(202101, 202153))
 (options, args) = parser.parse_args()
-if "2023" in options.epiweek_end:
-    epiweeks = list(range(int(options.epiweek_start), 202252)) + list(range(202301, int(options.epiweek_end)))
+if "2022" in options.epiweek_end:
+    epiweeks = list(range(int(options.epiweek_start), 202152)) + list(range(202201, int(options.epiweek_end)))
 else:
     epiweeks = list(range(int(options.epiweek_start), int(options.epiweek_end)))
 
@@ -126,12 +123,13 @@ patience = [100]
 ahead = [1,2,3]
 # ahead = [4]
 epiweeks = epiweeks[:-max(ahead)]
+
 for pat in patience:
     for sample in sample_out:
         for lr_ in lr:
             for week in tqdm(epiweeks):
                 for ah in ahead:
-                    save_model = "disease_"+str(options.disease)+"_epiweek_"+str(week)+"_weekahead_"+str(ah)
+                    save_model = "ps_disease_"+str(options.disease)+"_epiweek_"+str(week)+"_weekahead_"+str(ah)
                     to_run = []
                     if options.smart_mode != 0:
                         save_model += "_smart-mode-"+str(options.smart_mode)
@@ -151,10 +149,6 @@ for pat in patience:
                     if options.bert:
                         save_model = "bert_" + save_model
                         to_run = to_run + ["--bert-emb"]
-
-                    if options.fed:
-                        save_model = "fed_" + save_model
-                        to_run = to_run + ["--fed"]
 
                     if options.seed != 0:
                         save_model = save_model + "_seed_"+str(options.seed)

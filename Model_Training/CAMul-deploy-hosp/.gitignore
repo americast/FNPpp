@@ -1,3 +1,4 @@
 *.pyc
 envs/*
 .envs/*
+*.png
