@@ -358,13 +358,14 @@ def prefix_sequences_sm3(seq_avg, seq_unavg, day_ahead=day_ahead):
     """
     l = len(seq_avg)
     # try:
-    X, Y = np.zeros((l - day_ahead, l, seq_avg.shape[-1])), np.zeros(l - day_ahead)
+    X, X_smart, Y = np.zeros((l - day_ahead, l, seq_avg.shape[-1])), np.zeros((l - day_ahead, l, seq_avg.shape[-1])), np.zeros(l - day_ahead)
     # except:
     #     pu.db
     for i in range(l - day_ahead):
-        X[i, (l - i - 1) :, :] = seq_avg[: i + 1, :]
+        X[i, (l - i - 1) :, :] = seq_unavg[: i + 1, :]
+        X_smart[i, (l - i - 1) :, :] = seq_avg[: i + 1, :]
         Y[i] = seq_unavg[i + day_ahead, label_idx]
-    return X, Y
+    return X, X_smart, Y
 
 def prefix_sequences_weeks(seq, day_ahead=day_ahead):
     """
@@ -379,12 +380,12 @@ def prefix_sequences_weeks(seq, day_ahead=day_ahead):
         X[i, (l - i - 1) :] = seq[: i + 1]
     return X
 
-X, Y = [], []
+X, X_smart, Y = [], [], []
 X_weeks = []
 for i, st in enumerate(states):
     if st in states_to_consider:
         if options.smart_mode == 3 or options.smart_mode == 4 or options.smart_mode == 5 or options.smart_mode == 8:
-            x, y = prefix_sequences_sm3(raw_data[i], raw_data_unavgd[i])
+            x, x_smart, y = prefix_sequences_sm3(raw_data[i], raw_data_unavgd[i])
         else:
             if options.smart_mode == 6 or options.smart_mode == 7:
                 x, y = prefix_sequences(raw_data_unavgd[:, start_day:-day_ahead, :][i])
@@ -392,6 +393,7 @@ for i, st in enumerate(states):
                 x, y = prefix_sequences(raw_data[i])
         x_weeks = prefix_sequences_weeks(raw_data_weeks[i])
         X.append(x)
+        X_smart.append(x_smart)
         X_weeks.append(x_weeks)
         Y.append(y)
 
@@ -408,6 +410,7 @@ states_unflattened = [list(itertools.repeat(st, num_repeat)) for st in states_to
 for i in range(len(X)):
     perm = np.random.permutation(len(X[i]))
     X[i] = X[i][perm]
+    X_smart[i] = X_smart[i][perm]
     X_weeks[i] = X_weeks[i][perm]
     Y[i] = Y[i][perm]
     # states_unflattened[i] = np.array(states_unflattened[i])[perm].tolist()
@@ -416,12 +419,12 @@ for i in range(len(X)):
 # Divide val and train and test
 frac_val = 0.7
 frac_test = 0.9
-X_train, X_train_weeks, Y_train = np.concatenate([x[:int(len(X[0]) * frac_val)] for x in X]), np.concatenate([x_weeks[:int(len(X_weeks[0]) * frac_val)] for x_weeks in X_weeks]), np.concatenate([y[:int(len(X[0]) * frac_val)] for y in Y])
+X_train, X_train_smart, X_train_weeks, Y_train = np.concatenate([x[:int(len(X[0]) * frac_val)] for x in X]), np.concatenate([x[:int(len(X[0]) * frac_val)] for x in X_smart]), np.concatenate([x_weeks[:int(len(X_weeks[0]) * frac_val)] for x_weeks in X_weeks]), np.concatenate([y[:int(len(X[0]) * frac_val)] for y in Y])
 states_train = []
 for st_here in [x[:int(len(X[0]) * frac_val)] for x in states_unflattened]:
     states_train.extend(st_here)
 
-X_val, X_val_weeks, Y_val = np.concatenate([x[int(len(X[0]) * frac_val):int(len(X[0]) * frac_test)] for x in X]), np.concatenate([x_weeks[int(len(X_weeks[0]) * frac_val):int(len(X_weeks[0]) * frac_test)] for x_weeks in X_weeks]), np.concatenate([y[int(len(X[0]) * frac_val):int(len(X[0]) * frac_test)] for y in Y])
+X_val, X_val_smart, X_val_weeks, Y_val = np.concatenate([x[int(len(X[0]) * frac_val):int(len(X[0]) * frac_test)] for x in X]), np.concatenate([x[int(len(X[0]) * frac_val):int(len(X[0]) * frac_test)] for x in X_smart]), np.concatenate([x_weeks[int(len(X_weeks[0]) * frac_val):int(len(X_weeks[0]) * frac_test)] for x_weeks in X_weeks]), np.concatenate([y[int(len(X[0]) * frac_val):int(len(X[0]) * frac_test)] for y in Y])
 states_val = []
 for st_here in [x[int(len(X[0]) * frac_val):int(len(X[0]) * frac_test)] for x in states_unflattened]:
     states_val.extend(st_here)
@@ -436,10 +439,10 @@ for st_here in [x[int(len(X[0]) * frac_test):] for x in states_unflattened]:
 # random.seed(seed)
 # Shuffle data
 perm = np.random.permutation(len(X_train))
-X_train, X_train_weeks, Y_train, states_train = X_train[perm], X_train_weeks[perm], Y_train[perm], np.array(states_train)[perm].tolist()
+X_train, X_train_smart, X_train_weeks, Y_train, states_train = X_train[perm], X_train_smart[perm], X_train_weeks[perm], Y_train[perm], np.array(states_train)[perm].tolist()
 
 perm = np.random.permutation(len(X_val))
-X_val, X_val_weeks, Y_val, states_val = X_val[perm], X_val_weeks[perm], Y_val[perm], np.array(states_val)[perm].tolist()
+X_val, X_val_smart, X_val_weeks, Y_val, states_val = X_val[perm], X_val_smart[perm], X_val_weeks[perm], Y_val[perm], np.array(states_val)[perm].tolist()
 
 perm = np.random.permutation(len(X_test))
 X_test, X_test_weeks, Y_test, states_test = X_test[perm], X_test_weeks[perm], Y_test[perm], np.array(states_test)[perm].tolist()
@@ -953,6 +956,24 @@ class SeqDataWithWeeks(torch.utils.data.Dataset):
             float_tensor(self.Y[idx]),
         )
 
+class SeqDataWithWeeksSmart(torch.utils.data.Dataset):
+    def __init__(self, X, X_smart, X_weeks, Y):
+        self.X = X
+        self.X_smart = X_smart
+        self.X_weeks = X_weeks
+        self.Y = Y[:, None]
+
+    def __len__(self):
+        return self.X.shape[0]
+
+    def __getitem__(self, idx):
+        return (
+            float_tensor(self.X[idx, :, :]),
+            float_tensor(self.X_smart[idx, :, :]),
+            float_tensor(self.X_weeks[idx, :]),
+            float_tensor(self.Y[idx]),
+        )
+
 # Build dataset with state info
 class SeqDataWithStates(torch.utils.data.Dataset):
     def __init__(self, X, X_weeks, Y, states):
@@ -975,9 +996,35 @@ class SeqDataWithStates(torch.utils.data.Dataset):
         except:
             pu.db
 
-train_dataset = SeqDataWithWeeks(X_train, X_train_weeks, Y_train)
+class SeqDataWithStatesSmart(torch.utils.data.Dataset):
+    def __init__(self, X, X_smart, X_weeks, Y, states):
+        self.X = X
+        self.X_smart = X_smart
+        self.X_weeks = X_weeks
+        self.Y = Y[:, None]
+        self.states = states
+
+    def __len__(self):
+        return self.X.shape[0]
+
+    def __getitem__(self, idx):
+        try:
+            return (
+                float_tensor(self.X[idx, :, :]),
+                float_tensor(self.X_smart[idx, :, :]),
+                float_tensor(self.X_weeks[idx, :]),
+                float_tensor(self.Y[idx]),
+                self.states[idx],
+            )
+        except:
+            pu.db
+if options.smart_mode == 3 or options.smart_mode == 4 or options.smart_mode == 5 or options.smart_mode == 8:
+    train_dataset = SeqDataWithWeeksSmart(X_train, X_train_smart, X_train_weeks, Y_train)
+    val_dataset_with_states = SeqDataWithStatesSmart(X_val, X_val_smart, X_val_weeks, Y_val, states_val)
+else:
+    train_dataset = SeqDataWithWeeks(X_train, X_train_weeks, Y_train)
+    val_dataset_with_states = SeqDataWithStates(X_val, X_val_weeks, Y_val, states_val)
 val_dataset = SeqDataWithWeeks(X_val, X_val_weeks, Y_val)
-val_dataset_with_states = SeqDataWithStates(X_val, X_val_weeks, Y_val, states_val)
 train_loader = torch.utils.data.DataLoader(
     train_dataset, batch_size=batch_size, shuffle=False
 )
@@ -1118,73 +1165,111 @@ def train_step(data_loader, X, Y, X_ref):
             opt_conv.zero_grad()
                 # pu.db
     else:
-        for i, (x, x_weeks, y) in enumerate(data_loader):
-            # if kkk:
-            #     pu.db
-            
-            if options.bert_emb or options.rag:
-                opt_bert.zero_grad()
-            if options.bert_emb:
-                # My method
-                inp = float_tensor(X_ref).unsqueeze(2)
-                mask = float_tensor(X_ref!=-100)
-                x_seq = seq_enc(past_values=inp[:,:,-1], past_time_features=float_tensor(raw_data_weeks).unsqueeze(2), past_observed_mask=mask).encoder_last_hidden_state[:,-1,:]
+        # pu.db
+        if options.smart_mode == 3 or options.smart_mode == 4 or options.smart_mode == 5 or options.smart_mode == 8:
+            for i, (x, x_smart, x_weeks, y) in enumerate(data_loader):
+                # if kkk:
+                #     pu.db
                 
-                inp = float_tensor(x)
-                mask = x != -100
-                mask = mask.float()
-                x_feat = feat_enc(past_values=inp,past_time_features=float_tensor(x_weeks).unsqueeze(2), past_observed_mask=mask).encoder_last_hidden_state[:,-1,:] # Final dimension is [128, 64]
-                
-            else:
-                # Original method
-                # to_concat_batch = 
-                # np.random.seed(seed)
-                # torch.manual_seed(seed)
-                # random.seed(seed)
-                # if options.smart_mode == 8:
-                #     x_seq = seq_enc(float_tensor(np.ones_like(X_ref)).unsqueeze(2))
-                # else:
-                x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
-                # x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2)) # Converts [51,119 (,1)] to [51, 60]
-                # if options.smart_mode == 7:
-                #     try:
-                #         x_res = np.zeros_like(x.cpu().detach().numpy())
-                #     except:
-                #         pu.db
-                #     for a in range(x.shape[0]):
-                #         for b in range(x.shape[-1]):
-                #             x_res[a,:,b] = moving_wavg_5(moving_wavg_3(x[a,:,b].cpu().detach().numpy()))
-                #     scaler_here = ScalerFeat(x_res)
-                #     # pu.db
-                #     x = scaler_here.transform(x_res)
-                #     x[x_res==0] = x_res[x_res==0]
-                #     y = float_tensor(np.expand_dims(scaler_here.transform_idx(y[:,0].cpu().detach().numpy(), label_idx), axis=-1))
-                #     # pu.db
-                #     # x_res = np.zeros_like(x.cpu().detach().numpy())
-                #     # for a in range(x.shape[0]):
-                #     #     for b in range(x.shape[-1]):
-                #     #         x_res[a,:,b] = moving_avg_5(moving_avg_3(x[a,:,b].cpu().detach().numpy()))
-                #     # x_feat = feat_enc(float_tensor(x_res)) 
-                #     # x_res = []
-                #     # for ch in range(5):
-                #     #     x_res.append(conv_here_1(float_tensor(x[:,:,ch:ch+1]).permute([0,2,1])))
-                #     # # pu.db
-                #     # # x_res = [conv_here(float_tensor(x[:,:,ch:ch+1]).permute([0,2,1])) for ch in range(5)]
-                #     # x = torch.cat(x_res, axis = 1).permute([0,2,1])
-                #     # x_res = []
-                #     # for ch in range(5):
-                #     #     x_res.append(conv_here_2(float_tensor(x[:,:,ch:ch+1]).permute([0,2,1])))
-                #     # # pu.db
-                #     # # x_res = [conv_here(float_tensor(x[:,:,ch:ch+1]).permute([0,2,1])) for ch in range(5)]
-                #     # x = torch.cat(x_res, axis = 1).permute([0,2,1])
+                if options.bert_emb or options.rag:
+                    opt_bert.zero_grad()
+                if options.bert_emb:
+                    # My method
+                    inp = float_tensor(X_ref).unsqueeze(2)
+                    mask = float_tensor(X_ref!=-100)
+                    x_seq = seq_enc(past_values=inp[:,:,-1], past_time_features=float_tensor(raw_data_weeks).unsqueeze(2), past_observed_mask=mask).encoder_last_hidden_state[:,-1,:]
+                    
+                    inp = float_tensor(x)
+                    mask = x != -100
+                    mask = mask.float()
+                    x_feat = feat_enc(past_values=inp,past_time_features=float_tensor(x_weeks).unsqueeze(2), past_observed_mask=mask).encoder_last_hidden_state[:,-1,:] # Final dimension is [128, 64]
+                    
+                else:
+                    x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
+                    x_feat = feat_enc(float_tensor(x_smart)) # Converts [128, 119, 5] to [128, 60]
 
-                #     # m = torch.mean(x_res, axis=1)
-                #     # v = torch.var(x_res, axis=1)
-                #     # x = (x_res - m.unsqueeze(1))/v.unsqueeze(1)
-                #     x_feat = feat_enc(float_tensor(x) )
-                # else:
-                x_feat = feat_enc(float_tensor(x)) # Converts [128, 119, 5] to [128, 60]
+                loss, yp, _ = fnp_enc(x_seq, float_tensor(X_ref), x_feat, y)
+                yp = yp[X_ref.shape[0] :]
+                loss.backward()
+                opt.step()
+                if options.bert_emb or options.rag:
+                    opt_bert.step()
+                    # lr_scheduler.step()
+                YP.append(yp.detach().cpu().numpy())
+                T_target.append(y.detach().cpu().numpy())
+                total_loss += loss.detach().cpu().numpy()
+                train_err += torch.pow(yp - y, 2).mean().sqrt().detach().cpu().numpy()
+                opt.zero_grad()
                 # pu.db
+
+        else:
+            for i, (x, x_weeks, y) in enumerate(data_loader):
+                # if kkk:
+                #     pu.db
+                
+                if options.bert_emb or options.rag:
+                    opt_bert.zero_grad()
+                if options.bert_emb:
+                    # My method
+                    inp = float_tensor(X_ref).unsqueeze(2)
+                    mask = float_tensor(X_ref!=-100)
+                    x_seq = seq_enc(past_values=inp[:,:,-1], past_time_features=float_tensor(raw_data_weeks).unsqueeze(2), past_observed_mask=mask).encoder_last_hidden_state[:,-1,:]
+                    
+                    inp = float_tensor(x)
+                    mask = x != -100
+                    mask = mask.float()
+                    x_feat = feat_enc(past_values=inp,past_time_features=float_tensor(x_weeks).unsqueeze(2), past_observed_mask=mask).encoder_last_hidden_state[:,-1,:] # Final dimension is [128, 64]
+                    
+                else:
+                    # Original method
+                    # to_concat_batch = 
+                    # np.random.seed(seed)
+                    # torch.manual_seed(seed)
+                    # random.seed(seed)
+                    # if options.smart_mode == 8:
+                    #     x_seq = seq_enc(float_tensor(np.ones_like(X_ref)).unsqueeze(2))
+                    # else:
+                    x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
+                    # x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2)) # Converts [51,119 (,1)] to [51, 60]
+                    # if options.smart_mode == 7:
+                    #     try:
+                    #         x_res = np.zeros_like(x.cpu().detach().numpy())
+                    #     except:
+                    #         pu.db
+                    #     for a in range(x.shape[0]):
+                    #         for b in range(x.shape[-1]):
+                    #             x_res[a,:,b] = moving_wavg_5(moving_wavg_3(x[a,:,b].cpu().detach().numpy()))
+                    #     scaler_here = ScalerFeat(x_res)
+                    #     # pu.db
+                    #     x = scaler_here.transform(x_res)
+                    #     x[x_res==0] = x_res[x_res==0]
+                    #     y = float_tensor(np.expand_dims(scaler_here.transform_idx(y[:,0].cpu().detach().numpy(), label_idx), axis=-1))
+                    #     # pu.db
+                    #     # x_res = np.zeros_like(x.cpu().detach().numpy())
+                    #     # for a in range(x.shape[0]):
+                    #     #     for b in range(x.shape[-1]):
+                    #     #         x_res[a,:,b] = moving_avg_5(moving_avg_3(x[a,:,b].cpu().detach().numpy()))
+                    #     # x_feat = feat_enc(float_tensor(x_res)) 
+                    #     # x_res = []
+                    #     # for ch in range(5):
+                    #     #     x_res.append(conv_here_1(float_tensor(x[:,:,ch:ch+1]).permute([0,2,1])))
+                    #     # # pu.db
+                    #     # # x_res = [conv_here(float_tensor(x[:,:,ch:ch+1]).permute([0,2,1])) for ch in range(5)]
+                    #     # x = torch.cat(x_res, axis = 1).permute([0,2,1])
+                    #     # x_res = []
+                    #     # for ch in range(5):
+                    #     #     x_res.append(conv_here_2(float_tensor(x[:,:,ch:ch+1]).permute([0,2,1])))
+                    #     # # pu.db
+                    #     # # x_res = [conv_here(float_tensor(x[:,:,ch:ch+1]).permute([0,2,1])) for ch in range(5)]
+                    #     # x = torch.cat(x_res, axis = 1).permute([0,2,1])
+
+                    #     # m = torch.mean(x_res, axis=1)
+                    #     # v = torch.var(x_res, axis=1)
+                    #     # x = (x_res - m.unsqueeze(1))/v.unsqueeze(1)
+                    #     x_feat = feat_enc(float_tensor(x) )
+                    # else:
+                    x_feat = feat_enc(float_tensor(x)) # Converts [128, 119, 5] to [128, 60]
+                    # pu.db
 
 
                 # pu.db
@@ -1363,56 +1448,81 @@ def val_step_with_states(data_loader, X, Y, X_ref, sample=True):
                     states_here.extend(st)
                     all_As = [] 
         else:
-            for i, (x, x_weeks, y, st) in enumerate(data_loader):
-                if options.bert_emb:
-                    # My method
-                    # if options.smart_mode == 8:
-                    #     inp = float_tensor(np.ones_like(X_ref)).unsqueeze(2)
-                    # else:
-                    inp = float_tensor(X_ref).unsqueeze(2)
-                    mask = float_tensor(torch.ones_like(inp))
-                    x_seq = seq_enc(past_values=inp[:,:,-1], past_time_features=float_tensor(raw_data_weeks).unsqueeze(2), past_observed_mask=mask[:,:,-1]).encoder_last_hidden_state[:,-1,:]
-                    
-                    inp = float_tensor(x)
-                    mask = float_tensor(torch.ones_like(inp))
-                    x_feat = feat_enc(past_values=inp,past_time_features=float_tensor(x_weeks).unsqueeze(2), past_observed_mask=mask).encoder_last_hidden_state[:,-1,:] # Final dimension is [128, 64]
-                else:
-                    # np.random.seed(seed)
-                    # torch.manual_seed(seed)
-                    # random.seed(seed)
-                    # if options.smart_mode == 8:
-                    #     x_seq = seq_enc(float_tensor(np.ones_like(X_ref)).unsqueeze(2))
-                    # else:
-                    x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
-                    # if options.smart_mode == 7:
-                    #     x_res = np.zeros_like(x.cpu().detach().numpy())
-                    #     for a in range(x.shape[0]):
-                    #         for b in range(x.shape[-1]):
-                    #             x_res[a,:,b] = moving_wavg_5(moving_wavg_3(x[a,:,b].cpu().detach().numpy()))
-                    #     scaler_here = ScalerFeat(x_res)
-                    #     x = scaler_here.transform(x_res)
-                    #     x[x_res==0] = x_res[x_res==0]
-                    #     # pu.db
-                    #     y = float_tensor(np.expand_dims(scaler_here.transform_idx(y[:,0].cpu().detach().numpy(), label_idx), axis=-1))
-                    #     # x_res = []
-                    #     # for ch in range(5):
-                    #     #     x_res.append(conv_here_1(float_tensor(x[:,:,ch:ch+1]).permute([0,2,1])))
-                    #     # # pu.db
-                    #     # # x_res = [conv_here(float_tensor(x[:,:,ch:ch+1]).permute([0,2,1])) for ch in range(5)]
-                    #     # x = torch.cat(x_res, axis = 1).permute([0,2,1])
-                    #     # x_res = []
-                    #     # for ch in range(5):
-                    #     #     x_res.append(conv_here_2(float_tensor(x[:,:,ch:ch+1]).permute([0,2,1])))
-                    #     # # pu.db
-                    #     # # x_res = [conv_here(float_tensor(x[:,:,ch:ch+1]).permute([0,2,1])) for ch in range(5)]
-                    #     # x = torch.cat(x_res, axis = 1).permute([0,2,1])
+            if options.smart_mode == 3 or options.smart_mode == 4 or options.smart_mode == 5 or options.smart_mode == 8:
+                for i, (x, x_smart, x_weeks, y, st) in enumerate(data_loader):
+                    if options.bert_emb:
+                        inp = float_tensor(X_ref).unsqueeze(2)
+                        mask = float_tensor(torch.ones_like(inp))
+                        x_seq = seq_enc(past_values=inp[:,:,-1], past_time_features=float_tensor(raw_data_weeks).unsqueeze(2), past_observed_mask=mask[:,:,-1]).encoder_last_hidden_state[:,-1,:]
+                        
+                        inp = float_tensor(x)
+                        mask = float_tensor(torch.ones_like(inp))
+                        x_feat = feat_enc(past_values=inp,past_time_features=float_tensor(x_weeks).unsqueeze(2), past_observed_mask=mask).encoder_last_hidden_state[:,-1,:] # Final dimension is [128, 64]
+                    else:
+                        x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
+                        x_feat = feat_enc(float_tensor(x_smart)) # Converts [128, 119, 5] to [128, 60]
 
-                    #     # m = torch.mean(x_res, axis=1)
-                    #     # v = torch.var(x_res, axis=1)
-                    #     # x = (x_res - m.unsqueeze(1))/v.unsqueeze(1)
-                    #     x_feat = feat_enc(float_tensor(x) )
-                    # else:
-                    x_feat = feat_enc(float_tensor(x)) # Converts [128, 119, 5] to [128, 60]
+                yp, _, vars, _, _, _, A = fnp_enc.predict(
+                    x_feat, x_seq, float_tensor(X_ref), sample
+                )
+                # pu.db
+                val_err += torch.pow(yp - y, 2).mean().sqrt().detach().cpu().numpy()
+                YP.extend(yp.detach().cpu().numpy().tolist())
+                T_target.extend(y.detach().cpu().numpy().tolist())
+                all_vars.extend(vars.detach().cpu().numpy().tolist())
+                all_As.append(A.cpu().numpy())
+                states_here.extend(st)
+            else:
+                for i, (x, x_weeks, y, st) in enumerate(data_loader):
+                    if options.bert_emb:
+                        # My method
+                        # if options.smart_mode == 8:
+                        #     inp = float_tensor(np.ones_like(X_ref)).unsqueeze(2)
+                        # else:
+                        inp = float_tensor(X_ref).unsqueeze(2)
+                        mask = float_tensor(torch.ones_like(inp))
+                        x_seq = seq_enc(past_values=inp[:,:,-1], past_time_features=float_tensor(raw_data_weeks).unsqueeze(2), past_observed_mask=mask[:,:,-1]).encoder_last_hidden_state[:,-1,:]
+                        
+                        inp = float_tensor(x)
+                        mask = float_tensor(torch.ones_like(inp))
+                        x_feat = feat_enc(past_values=inp,past_time_features=float_tensor(x_weeks).unsqueeze(2), past_observed_mask=mask).encoder_last_hidden_state[:,-1,:] # Final dimension is [128, 64]
+                    else:
+                        # np.random.seed(seed)
+                        # torch.manual_seed(seed)
+                        # random.seed(seed)
+                        # if options.smart_mode == 8:
+                        #     x_seq = seq_enc(float_tensor(np.ones_like(X_ref)).unsqueeze(2))
+                        # else:
+                        x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
+                        # if options.smart_mode == 7:
+                        #     x_res = np.zeros_like(x.cpu().detach().numpy())
+                        #     for a in range(x.shape[0]):
+                        #         for b in range(x.shape[-1]):
+                        #             x_res[a,:,b] = moving_wavg_5(moving_wavg_3(x[a,:,b].cpu().detach().numpy()))
+                        #     scaler_here = ScalerFeat(x_res)
+                        #     x = scaler_here.transform(x_res)
+                        #     x[x_res==0] = x_res[x_res==0]
+                        #     # pu.db
+                        #     y = float_tensor(np.expand_dims(scaler_here.transform_idx(y[:,0].cpu().detach().numpy(), label_idx), axis=-1))
+                        #     # x_res = []
+                        #     # for ch in range(5):
+                        #     #     x_res.append(conv_here_1(float_tensor(x[:,:,ch:ch+1]).permute([0,2,1])))
+                        #     # # pu.db
+                        #     # # x_res = [conv_here(float_tensor(x[:,:,ch:ch+1]).permute([0,2,1])) for ch in range(5)]
+                        #     # x = torch.cat(x_res, axis = 1).permute([0,2,1])
+                        #     # x_res = []
+                        #     # for ch in range(5):
+                        #     #     x_res.append(conv_here_2(float_tensor(x[:,:,ch:ch+1]).permute([0,2,1])))
+                        #     # # pu.db
+                        #     # # x_res = [conv_here(float_tensor(x[:,:,ch:ch+1]).permute([0,2,1])) for ch in range(5)]
+                        #     # x = torch.cat(x_res, axis = 1).permute([0,2,1])
+
+                        #     # m = torch.mean(x_res, axis=1)
+                        #     # v = torch.var(x_res, axis=1)
+                        #     # x = (x_res - m.unsqueeze(1))/v.unsqueeze(1)
+                        #     x_feat = feat_enc(float_tensor(x) )
+                        # else:
+                        x_feat = feat_enc(float_tensor(x)) # Converts [128, 119, 5] to [128, 60]
 
                 yp, _, vars, _, _, _, A = fnp_enc.predict(
                     x_feat, x_seq, float_tensor(X_ref), sample
