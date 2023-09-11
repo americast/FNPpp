@@ -189,6 +189,58 @@ class GRUEncoder2(nn.Module):
         out_seq, _ = self.gru(batch)
         return (out_seq * mask.unsqueeze(-1)).sum(1)
 
+class Combine(nn.Module):
+    """
+    Encoder for categorical values
+    """
+
+    def __init__(self, in_size: int):
+        r"""
+        ## Inputs
+
+        :param in_size: Input vocab size
+        :param out_dim: Output dimensions
+        """
+        super(Combine, self).__init__()
+        self.gru1 = nn.GRU(in_size, 1, batch_first=True)
+        self.gru2 = nn.GRU(in_size, 1, batch_first=True)
+        self.linear = nn.Linear(238, 1)
+        self.act = nn.Sigmoid()
+
+    def forward(self, batch_x, batch_x_avgd):
+        x1, _ = self.gru1(batch_x)
+        x2, _ = self.gru2(batch_x_avgd)
+        x1x2 = torch.cat([x1.squeeze(-1), x2.squeeze(-1)], axis=-1)
+        weight = self.act(self.linear(x1x2)).unsqueeze(-1)
+        # print(torch.mean(weight, dim=0))
+        return weight * batch_x + (1-weight)*batch_x_avgd
+
+class CombineFFT(nn.Module):
+    """
+    Encoder for categorical values
+    """
+
+    def __init__(self, in_size: int):
+        r"""
+        ## Inputs
+
+        :param in_size: Input vocab size
+        :param out_dim: Output dimensions
+        """
+        super(CombineFFT, self).__init__()
+        self.gru1 = nn.GRU(in_size, 1, batch_first=True)
+        self.gru2 = nn.GRU(in_size, 1, batch_first=True)
+        self.linear = nn.Linear(238, 1)
+        self.act = nn.Sigmoid()
+
+    def forward(self, batch_x, batch_x_avgd):
+        x1, _ = self.gru1(torch.real(torch.fft.fft2(batch_x)))
+        x2, _ = self.gru2(torch.real(torch.fft.fft2(batch_x_avgd)))
+        x1x2 = torch.cat([x1.squeeze(-1), x2.squeeze(-1)], axis=-1)
+        weight = self.act(self.linear(x1x2)).unsqueeze(-1)
+        # print(torch.mean(weight, dim=0))
+        return weight * batch_x + (1-weight)*batch_x_avgd
+
 class EmbGCNEncoder(nn.Module):
     """
     Encoder for categorical values with adj graph

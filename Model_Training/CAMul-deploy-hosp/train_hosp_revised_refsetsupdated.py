@@ -18,6 +18,8 @@ from models.multimodels import (
     LatentEncoder,
     CorrEncoder,
     Decoder,
+    Combine,
+    CombineFFT
 )
 from copy import deepcopy
 from models.fnpmodels import RegressionFNP2
@@ -52,13 +54,17 @@ parser.add_option("--nn", dest="nn", default="none", type="choice", choices=["no
 parser.add_option("--bert-emb", dest="bert_emb", action="store_true", default=False)
 parser.add_option("--fed", dest="fed", action="store_true", default=False)
 parser.add_option("--smart-mode", dest="smart_mode", default=0, type="int")
+parser.add_option("--optionals", dest="optionals", default=" ", type="str")
 
 (options, args) = parser.parse_args()
 epiweek_pres = options.epiweek_pres
 epiweek = options.epiweek
 day_ahead = options.day_ahead
 seed = options.seed
-save_model_name = options.save_model
+if options.optionals != " ":
+    save_model_name = options.save_model+"_optionals_"+options.optionals
+else:
+    save_model_name = options.save_model
 start_model = options.start_model
 cuda = options.cuda
 start_day = options.start_day
@@ -792,6 +798,11 @@ def moving_wavg_35(x, kernel_size_2=5, kernel_size_1=3):
     # x = x.detach().numpy().tolist()
     return x[0][0]
 
+if "fft" in options.optionals:
+    combine = CombineFFT(len(include_cols)).to(device)
+elif "combine" in options.optionals:
+    combine = Combine(len(include_cols)).to(device)
+
 
 # Build dataset
 class SeqDataWithConv(torch.utils.data.Dataset):
@@ -1096,6 +1107,14 @@ else:
             + list(fnp_enc.parameters()),
             lr=lr,
         )
+    elif options.smart_mode == 5 and "combine" in options.optionals:
+        opt = torch.optim.Adam(
+            list(combine.parameters())
+            + list(seq_enc.parameters())
+            + list(feat_enc.parameters())
+            + list(fnp_enc.parameters()),
+            lr=lr,
+        )
     else:
         # Original method
         opt = torch.optim.Adam(
@@ -1186,7 +1205,8 @@ def train_step(data_loader, X, Y, X_ref):
                     
                 else:
                     x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
-                    x_feat = feat_enc(float_tensor(x_smart)) # Converts [128, 119, 5] to [128, 60]
+                    x_here = combine(x,x_smart)
+                    x_feat = feat_enc(x_here) # Converts [128, 119, 5] to [128, 60]
 
                 loss, yp, _ = fnp_enc(x_seq, float_tensor(X_ref), x_feat, y)
                 yp = yp[X_ref.shape[0] :]
@@ -1460,7 +1480,8 @@ def val_step_with_states(data_loader, X, Y, X_ref, sample=True):
                         x_feat = feat_enc(past_values=inp,past_time_features=float_tensor(x_weeks).unsqueeze(2), past_observed_mask=mask).encoder_last_hidden_state[:,-1,:] # Final dimension is [128, 64]
                     else:
                         x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
-                        x_feat = feat_enc(float_tensor(x_smart)) # Converts [128, 119, 5] to [128, 60]
+                        x_here = combine(x,x_smart)
+                        x_feat = feat_enc(x_here) # Converts [128, 119, 5] to [128, 60]
 
                 yp, _, vars, _, _, _, A = fnp_enc.predict(
                     x_feat, x_seq, float_tensor(X_ref), sample
