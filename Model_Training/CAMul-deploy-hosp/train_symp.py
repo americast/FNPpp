@@ -23,9 +23,11 @@ from models.multimodels import (
     LatentEncoder,
     CorrEncoder,
     Decoder,
+    Combine
 )
 from tqdm import tqdm
 from scipy.signal import argrelextrema
+from scipy.fft import fft
 
 import pudb
 parser = OptionParser()
@@ -37,6 +39,8 @@ parser.add_option("-m", "--save", dest="save_model", default="default", type="st
 parser.add_option("--seed", dest="seed", default=0, type="int")
 parser.add_option("--smart-mode", dest="smart_mode", default=0, type="int")
 parser.add_option("--nn", dest="nn", default="none", type="choice", choices=["none", "simple", "bn", "dot", "bert"])
+parser.add_option("--optionals", dest="optionals", default=" ", type="str")
+
 
 (options, args) = parser.parse_args()
 
@@ -133,7 +137,7 @@ def smoothen(x):
 
 
 train_dataset = [seq_to_dataset(seq, week_ahead) for seq in train_seqs]
-X, X_symp, Y, wk, reg = [], [], [], [], []
+X, X_smart, X_symp, X_symp_smart, Y, wk, reg = [], [], [], [], [], [], []
 for x, y, w, r in train_dataset:
     if options.smart_mode == 5:
         X.extend([smoothen(l[:, -1]) for l in x])
@@ -141,11 +145,13 @@ for x, y, w, r in train_dataset:
     else:
         X.extend([l[:, -1] for l in x])
         X_symp.extend([l[:, :-1] for l in x])
+        X_smart.extend([smoothen(l[:, -1]) for l in x])
+        X_symp_smart.extend([smoothen(l[:, :-1]) for l in x])
     Y.extend(y)
     wk.extend(w)
     reg.extend(r)
 test_dataset = [seq_to_dataset(seq, week_ahead) for seq in test_seqs]
-X_test, X_symp_test, Y_test, wk_test, reg_test = [], [], [], [], []
+X_test, X_test_smart, X_symp_test, X_symp_test_smart, Y_test, wk_test, reg_test = [], [], [], [], [], [], []
 for x, y, w, r in test_dataset:
     if options.smart_mode == 5:
         X_test.extend([smoothen(l[:, -1]) for l in x])
@@ -153,6 +159,8 @@ for x, y, w, r in test_dataset:
     else:
         X_test.extend([l[:, -1] for l in x])
         X_symp_test.extend([l[:, :-1] for l in x])
+        X_test_smart.extend([smoothen(l[:, -1]) for l in x])
+        X_symp_test_smart.extend([smoothen(l[:, :-1]) for l in x])
     Y_test.extend(y)
     wk_test.extend(w)
     reg_test.extend(r)
@@ -231,7 +239,7 @@ if options.smart_mode == 1 or options.smart_mode == 8:
                 to_concat.append(to_append)
             ci = si
         to_concat.append(seq_references[i])
-    pu.db
+    # pu.db
     seq_references = to_concat
 
 def preprocess_seq_batch(seq_list: list):
@@ -248,14 +256,18 @@ def preprocess_seq_batch(seq_list: list):
 seq_references = preprocess_seq_batch(seq_references)
 symp_references = preprocess_seq_batch(symp_references)
 train_seqs = preprocess_seq_batch(X)
+train_seqs_smart = preprocess_seq_batch(X_smart)
 train_y = np.array(Y)
 train_symp_seqs = preprocess_seq_batch(X_symp)
+train_symp_seqs_smart = preprocess_seq_batch(X_symp_smart)
 mt = np.array(mt, dtype=np.int32)
 mt_test = np.array(mt_test, dtype=np.int32)
 reg = np.array(reg, dtype=np.int32) - 1
 reg_test = np.array(reg_test, dtype=np.int32) - 1
 test_seqs = preprocess_seq_batch(X_test)
+test_seqs_smart = preprocess_seq_batch(X_test_smart)
 test_symp_seqs = preprocess_seq_batch(X_symp_test)
+test_symp_seqs_smart = preprocess_seq_batch(X_symp_test_smart)
 test_y = np.array(Y_test)
 
 month_enc = EmbedEncoder(in_size=12, out_dim=60).to(device)
@@ -269,6 +281,33 @@ stoch_month_enc = LatentEncoder(in_dim=60, hidden_layers=[60], out_dim=60).to(de
 stoch_seq_enc = LatentEncoder(in_dim=60, hidden_layers=[60], out_dim=60).to(device)
 stoch_symp_enc = LatentEncoder(in_dim=60, hidden_layers=[60], out_dim=60).to(device)
 stoch_reg_enc = LatentEncoder(in_dim=60, hidden_layers=[60], out_dim=60).to(device)
+
+if "fft" in options.optionals:
+    seq_encoder_fft = GRUEncoder(in_size=1, out_dim=60).to(device)
+    symp_encoder_fft = GRUEncoder(in_size=14, out_dim=60).to(device)
+    stoch_seq_enc_fft = LatentEncoder(in_dim=60, hidden_layers=[60], out_dim=60).to(device)
+    stoch_symp_enc_fft = LatentEncoder(in_dim=60, hidden_layers=[60], out_dim=60).to(device)
+
+    seq_corr_fft = CorrEncoder(
+        nn_A=options.nn,
+        in_data_dim=60,
+        in_data_det_dim=60,
+        in_ref_dim=60,
+        in_ref_det_dim=60,
+        hidden_dim=60,
+        q_layers=2,
+        same_decoder=True,
+    ).to(device)
+    symp_corr_fft = CorrEncoder(
+        nn_A=options.nn,
+        in_data_dim=60,
+        in_data_det_dim=60,
+        in_ref_dim=60,
+        in_ref_det_dim=60,
+        hidden_dim=60,
+        q_layers=2,
+        same_decoder=True,
+    ).to(device)
 
 month_corr = CorrEncoder(
     nn_A=options.nn,
@@ -328,34 +367,59 @@ models = [
     reg_corr,
     decoder,
 ]
+hidden_size_combine = 102
+if week_ahead == 2:
+    hidden_size_combine = 100
+if week_ahead == 3:
+    hidden_size_combine = 98
+if "combine" in options.optionals:
+    combine_seq = Combine(1, hidden_size_combine).to(device)
+    combine_symp = Combine(len(include_cols), hidden_size_combine).to(device)
+    models += [
+        combine_seq,
+        combine_symp,
+    ]
+if "fft" in options.optionals:
+    models += [
+        seq_encoder_fft,
+        symp_encoder_fft,
+        stoch_seq_enc_fft,
+        stoch_symp_enc_fft,
+        seq_corr_fft,
+        symp_corr_fft
+    ]
+
 
 opt = optim.Adam(
     reduce(lambda x, y: x + y, [list(m.parameters()) for m in models]), lr=1e-3
 )
 
 # Porbabilistic encode of reference points
-ref_months = month_enc.forward(long_tensor(month_references))
-ref_seq = seq_encoder.forward(float_tensor(seq_references))
-ref_symp = symp_encoder.forward(float_tensor(symp_references))
-ref_reg = reg_encoder.forward(long_tensor(reg_references), graph.to(device))
+# ref_months = month_enc.forward(long_tensor(month_references))
+# ref_seq = seq_encoder.forward(float_tensor(seq_references))
+# ref_symp = symp_encoder.forward(float_tensor(symp_references))
+# ref_reg = reg_encoder.forward(long_tensor(reg_references), graph.to(device))
 
-stoch_ref_months = stoch_month_enc.forward(ref_months)[0]
-stoch_ref_seq = stoch_seq_enc.forward(ref_seq)[0]
-stoch_ref_symp = stoch_symp_enc.forward(ref_symp)[0]
-stoch_ref_reg = stoch_reg_enc.forward(ref_reg)[0]
+# stoch_ref_months = stoch_month_enc.forward(ref_months)[0]
+# stoch_ref_seq = stoch_seq_enc.forward(ref_seq)[0]
+# stoch_ref_symp = stoch_symp_enc.forward(ref_symp)[0]
+# stoch_ref_reg = stoch_reg_enc.forward(ref_reg)[0]
 
-# Probabilistic encode of training points
+# # Probabilistic encode of training points
 
-train_months = month_enc.forward(long_tensor(mt.astype(int)))
-train_seq = seq_encoder.forward(float_tensor(train_seqs))
-train_symp = symp_encoder.forward(float_tensor(train_symp_seqs))
-train_reg = torch.stack([ref_reg[i] for i in mt], dim=0)
+# train_months = month_enc.forward(long_tensor(mt.astype(int)))
+# train_seq = seq_encoder.forward(float_tensor(train_seqs))
+# train_symp = symp_encoder.forward(float_tensor(train_symp_seqs))
+# train_reg = torch.stack([ref_reg[i] for i in mt], dim=0)
 
-stoch_train_months = stoch_month_enc.forward(train_months)[0]
-stoch_train_seq = stoch_seq_enc.forward(train_seq)[0]
-stoch_train_symp = stoch_symp_enc.forward(train_symp)[0]
-stoch_train_reg = stoch_reg_enc.forward(train_reg)[0]
+# stoch_train_months = stoch_month_enc.forward(train_months)[0]
+# stoch_train_seq = stoch_seq_enc.forward(train_seq)[0]
+# stoch_train_symp = stoch_symp_enc.forward(train_symp)[0]
+# stoch_train_reg = stoch_reg_enc.forward(train_reg)[0]
 
+# if "fft" in options.optionals:
+#     seq_references = np.concatenate([seq_references, fft(seq_references).real, fft(seq_references).imag], axis=0)
+#     symp_references = np.concatenate([symp_references, fft(symp_references).real, fft(symp_references).imag], axis=0)
 
 def train(train_seqs, train_symp_seqs, reg, mt, train_y):
     for m in models:
@@ -373,25 +437,59 @@ def train(train_seqs, train_symp_seqs, reg, mt, train_y):
     stoch_ref_symp = stoch_symp_enc.forward(ref_symp)[0]
     stoch_ref_reg = stoch_reg_enc.forward(ref_reg)[0]
 
-    # Probabilistic encode of training points
 
+    # Probabilistic encode of training points
     train_months = month_enc.forward(long_tensor(mt.astype(int)))
-    train_seq = seq_encoder.forward(float_tensor(train_seqs))
-    train_symp = symp_encoder.forward(float_tensor(train_symp_seqs))
+    if "combine" in options.optionals:
+        combined_seq = combine_seq(float_tensor(train_seqs), float_tensor(train_seqs_smart))
+        combined_symp = combine_symp(float_tensor(train_symp_seqs), float_tensor(train_symp_seqs_smart))
+    else:
+        combined_seq = float_tensor(train_seqs)
+        combined_symp = float_tensor(train_symp_seqs)
+    train_seq = seq_encoder.forward(combined_seq)
+    train_symp = symp_encoder.forward(combined_symp)
     train_reg = torch.stack([ref_reg[i] for i in reg], dim=0)
 
     stoch_train_months = stoch_month_enc.forward(train_months)[0]
     stoch_train_seq = stoch_seq_enc.forward(train_seq)[0]
     stoch_train_symp = stoch_symp_enc.forward(train_symp)[0]
     stoch_train_reg = stoch_reg_enc.forward(train_reg)[0]
+
+
+    if "fft" in options.optionals:
+        combined_seq_fft = torch.fft.fft(combined_seq).real
+        train_seq_fft = seq_encoder_fft.forward(combined_seq_fft)
+        combined_symp_fft = torch.fft.fft(combined_symp).real
+        train_symp_fft = symp_encoder_fft.forward(combined_symp_fft)
+        train_reg = torch.stack([ref_reg[i] for i in reg], dim=0)
+
+        stoch_train_seq_fft = stoch_seq_enc_fft.forward(train_seq_fft)[0]
+        stoch_train_symp_fft = stoch_symp_enc_fft.forward(train_symp_fft)[0]
+        ref_seq_fft = seq_encoder_fft.forward(float_tensor(seq_references))
+        ref_symp_fft = symp_encoder_fft.forward(float_tensor(symp_references))
+        stoch_ref_seq_fft = stoch_seq_enc_fft.forward(ref_seq)[0]
+        stoch_ref_symp_fft = stoch_symp_enc_fft.forward(ref_symp)[0]
+
+        # Get view-aware latent embeddings
+        train_seq_z_fft, train_seq_sr_fft, _, seq_loss_fft, _ = seq_corr_fft.forward(
+            stoch_ref_seq_fft, stoch_train_seq_fft, ref_seq_fft, train_seq_fft
+        )
+
+        train_symp_z_fft, train_symp_sr_fft, _, symp_loss_fft, _ = symp_corr_fft.forward(
+            stoch_ref_symp_fft, stoch_train_symp_fft, ref_symp_fft, train_symp_fft
+        )
+
+
+
     # Get view-aware latent embeddings
     train_months_z, train_month_sr, _, month_loss, _ = month_corr.forward(
         stoch_ref_months, stoch_train_months, ref_months, train_months
     )
-    pu.db
+
     train_seq_z, train_seq_sr, _, seq_loss, _ = seq_corr.forward(
         stoch_ref_seq, stoch_train_seq, ref_seq, train_seq
     )
+    # pu.db
     train_symp_z, train_symp_sr, _, symp_loss, _ = symp_corr.forward(
         stoch_ref_symp, stoch_train_symp, ref_symp, train_symp
     )
@@ -400,18 +498,29 @@ def train(train_seqs, train_symp_seqs, reg, mt, train_y):
     )
 
     # Concat all latent embeddings
-    train_z = torch.stack(
-        [train_months_z, train_seq_z, train_symp_z, train_reg_z], dim=1
-    )
-    train_sr = torch.stack(
-        [train_month_sr, train_seq_sr, train_symp_sr, train_reg_sr], dim=1
-    )
+    if "fft" in options.optionals:
+        train_z = torch.stack(
+            [train_months_z, train_seq_z, train_seq_z_fft, train_symp_z, train_symp_z_fft, train_reg_z], dim=1
+        )
+        train_sr = torch.stack(
+            [train_month_sr, train_seq_sr, train_seq_sr_fft, train_symp_sr, train_symp_sr_fft, train_reg_sr], dim=1
+        )
+    else:
+        train_z = torch.stack(
+            [train_months_z, train_seq_z, train_symp_z, train_reg_z], dim=1
+        )
+        train_sr = torch.stack(
+            [train_month_sr, train_seq_sr, train_symp_sr, train_reg_sr], dim=1
+        )
 
     loss, mean_y, _, _ = decoder.forward(
         train_z, train_sr, train_seq, float_tensor(train_y)[:, None]
     )
 
     losses = month_loss + seq_loss + symp_loss + reg_loss + loss
+    if "fft" in options.optionals:
+        losses += seq_loss_fft + symp_loss_fft
+
     losses.backward()
     opt.step()
     # print(f"Loss = {loss.detach().cpu().numpy()}")
@@ -440,14 +549,44 @@ def evaluate(test_seqs, test_symp_seqs, reg_test, mt_test, test_y, sample=True):
     # Probabilistic encode of test points
 
     test_months = month_enc.forward(long_tensor(mt_test.astype(int)))
-    test_seq = seq_encoder.forward(float_tensor(test_seqs))
-    test_symp = symp_encoder.forward(float_tensor(test_symp_seqs))
+    if "combine" in options.optionals:
+        combined_seq = combine_seq(float_tensor(test_seqs), float_tensor(test_seqs_smart))
+        combined_symp = combine_symp(float_tensor(test_symp_seqs), float_tensor(test_symp_seqs_smart))
+    else:
+        combined_seq = float_tensor(test_seqs)
+        combined_symp = float_tensor(test_symp_seqs)
+    test_seq = seq_encoder.forward(combined_seq)
+    test_symp = symp_encoder.forward(combined_symp)
     test_reg = torch.stack([ref_reg[i] for i in reg_test], dim=0)
 
     stoch_test_months = stoch_month_enc.forward(test_months)[0]
     stoch_test_seq = stoch_seq_enc.forward(test_seq)[0]
     stoch_test_symp = stoch_symp_enc.forward(test_symp)[0]
     stoch_test_reg = stoch_reg_enc.forward(test_reg)[0]
+
+    if "fft" in options.optionals:
+        combined_seq_fft = torch.fft.fft(combined_seq).real
+        test_seq_fft = seq_encoder_fft.forward(combined_seq_fft)
+        combined_symp_fft = torch.fft.fft(combined_symp).real
+        test_symp_fft = symp_encoder_fft.forward(combined_symp_fft)
+        test_reg = torch.stack([ref_reg[i] for i in reg], dim=0)
+
+        stoch_test_seq_fft = stoch_seq_enc_fft.forward(test_seq_fft)[0]
+        stoch_test_symp_fft = stoch_symp_enc_fft.forward(test_symp_fft)[0]
+        ref_seq_fft = seq_encoder_fft.forward(float_tensor(seq_references))
+        ref_symp_fft = symp_encoder_fft.forward(float_tensor(symp_references))
+        stoch_ref_seq_fft = stoch_seq_enc_fft.forward(ref_seq)[0]
+        stoch_ref_symp_fft = stoch_symp_enc_fft.forward(ref_symp)[0]
+
+        # Get view-aware latent embeddings
+        test_seq_z_fft, test_seq_sr_fft, _, seq_loss_fft, _ = seq_corr_fft.forward(
+            stoch_ref_seq_fft, stoch_test_seq_fft, ref_seq_fft, test_seq_fft
+        )
+
+        test_symp_z_fft, test_symp_sr_fft, _, symp_loss_fft, _ = symp_corr_fft.forward(
+            stoch_ref_symp_fft, stoch_test_symp_fft, ref_symp_fft, test_symp_fft
+        )
+
     # Get view-aware latent embeddings
     test_months_z, test_month_sr, _, _, _, _ = month_corr.predict(
         stoch_ref_months, stoch_test_months, ref_months, test_months
@@ -463,10 +602,20 @@ def evaluate(test_seqs, test_symp_seqs, reg_test, mt_test, test_y, sample=True):
     )
 
     # Concat all latent embeddings
-    test_z = torch.stack([test_months_z, test_seq_z, test_symp_z, test_reg_z], dim=1)
-    test_sr = torch.stack(
-        [test_month_sr, test_seq_sr, test_symp_sr, test_reg_sr], dim=1
-    )
+    if "fft" in options.optionals:
+        test_z = torch.stack(
+            [test_months_z, test_seq_z, test_seq_z_fft, test_symp_z, test_symp_z_fft, test_reg_z], dim=1
+        )
+        test_sr = torch.stack(
+            [test_month_sr, test_seq_sr, test_seq_sr_fft, test_symp_sr, test_symp_sr_fft, test_reg_sr], dim=1
+        )
+    else:
+        test_z = torch.stack(
+            [test_months_z, test_seq_z, test_symp_z, test_reg_z], dim=1
+        )
+        test_sr = torch.stack(
+            [test_month_sr, test_seq_sr, test_symp_sr, test_reg_sr], dim=1
+        )
 
     sample_y, mean_y, _, _ = decoder.predict(
         test_z, test_sr, test_seq, sample=sample
@@ -488,6 +637,9 @@ for ep in tqdm(range(1, epochs + 1)):
         print("Evaluating")
         rmse_here, yp, yt = evaluate(test_seqs, test_symp_seqs, reg_test, mt_test, test_y)
         all_results[ep] = {"rmse": rmse_here, "pred": yp, "gt": yt}
+
+if options.optionals != " ":
+    options.save_model = options.save_model+"_optionals_"+options.optionals
 
 os.makedirs(f"/localscratch/ssinha97/fnp_evaluations/symp_val_predictions_normal", exist_ok=True)
 with open(f"/localscratch/ssinha97/fnp_evaluations/symp_val_predictions_normal/"+str(options.save_model)+"_predictions.pkl", "wb") as f:

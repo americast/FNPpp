@@ -8,6 +8,7 @@ parser.add_option("--nn", dest="nn", default="none", type="choice", choices=["no
 parser.add_option("--seed", dest="seed", default=0, type="int")
 parser.add_option("--smart-mode", dest="smart_mode", default=0, type="int")
 parser.add_option("-y", "--year", dest="year", type="int", default=2020)
+parser.add_option("--optionals", dest="optionals", default=" ", type="str")
 
 # epiweeks = list(range(202101, 202153))
 (options, args) = parser.parse_args()
@@ -71,5 +72,7 @@ for pat in patience:
                             save_model,
                             "-w",
                             str(ah),
+                            "--optionals",
+                            str(options.optionals)
                         ] + to_run
                     )

@@ -18,8 +18,7 @@ from models.multimodels import (
     LatentEncoder,
     CorrEncoder,
     Decoder,
-    Combine,
-    CombineFFT
+    Combine
 )
 from copy import deepcopy
 from models.fnpmodels import RegressionFNP2
@@ -27,6 +26,7 @@ from tqdm import tqdm
 from itertools import product
 from transformers import BertModel, BertConfig, BertTokenizer, pipeline, get_scheduler, BertForSequenceClassification, InformerConfig, InformerModel
 from scipy.signal import argrelextrema
+from scipy.fft import fft
 # sys.path.append("~/FEDformer")
 parser = OptionParser()
 parser.add_option("-p", "--epiweek_pres", dest="epiweek_pres", default="202310", type="string")
@@ -798,10 +798,14 @@ def moving_wavg_35(x, kernel_size_2=5, kernel_size_1=3):
     # x = x.detach().numpy().tolist()
     return x[0][0]
 
-if "fft" in options.optionals:
-    combine = CombineFFT(len(include_cols)).to(device)
-elif "combine" in options.optionals:
-    combine = Combine(len(include_cols)).to(device)
+hidden_size_combine = 238
+if day_ahead == 2:
+    hidden_size_combine = 236
+if day_ahead == 3:
+    hidden_size_combine = 234
+
+if "combine" in options.optionals:
+    combine = Combine(len(include_cols), hidden_size_combine).to(device)
 
 
 # Build dataset
@@ -1125,6 +1129,8 @@ else:
         )
 
 kkk = 0 
+if "fft" in options.optionals:
+    X_ref = np.concatenate([X_ref, fft(X_ref).real, fft(X_ref).imag], axis=0)
 def train_step(data_loader, X, Y, X_ref):
     """
     Train step
@@ -1205,7 +1211,10 @@ def train_step(data_loader, X, Y, X_ref):
                     
                 else:
                     x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
-                    x_here = combine(x,x_smart)
+                    if "combine" in options.optionals:
+                        x_here = combine(x,x_smart)
+                    else:
+                        x_here = x
                     x_feat = feat_enc(x_here) # Converts [128, 119, 5] to [128, 60]
 
                 loss, yp, _ = fnp_enc(x_seq, float_tensor(X_ref), x_feat, y)
@@ -1480,7 +1489,10 @@ def val_step_with_states(data_loader, X, Y, X_ref, sample=True):
                         x_feat = feat_enc(past_values=inp,past_time_features=float_tensor(x_weeks).unsqueeze(2), past_observed_mask=mask).encoder_last_hidden_state[:,-1,:] # Final dimension is [128, 64]
                     else:
                         x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
-                        x_here = combine(x,x_smart)
+                        if "combine" in options.optionals:
+                            x_here = combine(x,x_smart)
+                        else:
+                            x_here = x
                         x_feat = feat_enc(x_here) # Converts [128, 119, 5] to [128, 60]
 
                 yp, _, vars, _, _, _, A = fnp_enc.predict(
