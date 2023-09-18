@@ -392,6 +392,7 @@ for i, st in enumerate(states):
     if st in states_to_consider:
         if options.smart_mode == 3 or options.smart_mode == 4 or options.smart_mode == 5 or options.smart_mode == 8:
             x, x_smart, y = prefix_sequences_sm3(raw_data[i], raw_data_unavgd[i])
+            X_smart.append(x_smart)
         else:
             if options.smart_mode == 6 or options.smart_mode == 7:
                 x, y = prefix_sequences(raw_data_unavgd[:, start_day:-day_ahead, :][i])
@@ -399,7 +400,6 @@ for i, st in enumerate(states):
                 x, y = prefix_sequences(raw_data[i])
         x_weeks = prefix_sequences_weeks(raw_data_weeks[i])
         X.append(x)
-        X_smart.append(x_smart)
         X_weeks.append(x_weeks)
         Y.append(y)
 
@@ -416,7 +416,8 @@ states_unflattened = [list(itertools.repeat(st, num_repeat)) for st in states_to
 for i in range(len(X)):
     perm = np.random.permutation(len(X[i]))
     X[i] = X[i][perm]
-    X_smart[i] = X_smart[i][perm]
+    if len(X_smart) > 0:
+        X_smart[i] = X_smart[i][perm]
     X_weeks[i] = X_weeks[i][perm]
     Y[i] = Y[i][perm]
     # states_unflattened[i] = np.array(states_unflattened[i])[perm].tolist()
@@ -425,12 +426,18 @@ for i in range(len(X)):
 # Divide val and train and test
 frac_val = 0.7
 frac_test = 0.9
-X_train, X_train_smart, X_train_weeks, Y_train = np.concatenate([x[:int(len(X[0]) * frac_val)] for x in X]), np.concatenate([x[:int(len(X[0]) * frac_val)] for x in X_smart]), np.concatenate([x_weeks[:int(len(X_weeks[0]) * frac_val)] for x_weeks in X_weeks]), np.concatenate([y[:int(len(X[0]) * frac_val)] for y in Y])
+if len(X_smart) > 0:
+    X_train, X_train_smart, X_train_weeks, Y_train = np.concatenate([x[:int(len(X[0]) * frac_val)] for x in X]), np.concatenate([x[:int(len(X[0]) * frac_val)] for x in X_smart]), np.concatenate([x_weeks[:int(len(X_weeks[0]) * frac_val)] for x_weeks in X_weeks]), np.concatenate([y[:int(len(X[0]) * frac_val)] for y in Y])
+else:
+    X_train, X_train_weeks, Y_train = np.concatenate([x[:int(len(X[0]) * frac_val)] for x in X]), np.concatenate([x_weeks[:int(len(X_weeks[0]) * frac_val)] for x_weeks in X_weeks]), np.concatenate([y[:int(len(X[0]) * frac_val)] for y in Y])
 states_train = []
 for st_here in [x[:int(len(X[0]) * frac_val)] for x in states_unflattened]:
     states_train.extend(st_here)
 
-X_val, X_val_smart, X_val_weeks, Y_val = np.concatenate([x[int(len(X[0]) * frac_val):int(len(X[0]) * frac_test)] for x in X]), np.concatenate([x[int(len(X[0]) * frac_val):int(len(X[0]) * frac_test)] for x in X_smart]), np.concatenate([x_weeks[int(len(X_weeks[0]) * frac_val):int(len(X_weeks[0]) * frac_test)] for x_weeks in X_weeks]), np.concatenate([y[int(len(X[0]) * frac_val):int(len(X[0]) * frac_test)] for y in Y])
+if len(X_smart) > 0:
+    X_val, X_val_smart, X_val_weeks, Y_val = np.concatenate([x[int(len(X[0]) * frac_val):int(len(X[0]) * frac_test)] for x in X]), np.concatenate([x[int(len(X[0]) * frac_val):int(len(X[0]) * frac_test)] for x in X_smart]), np.concatenate([x_weeks[int(len(X_weeks[0]) * frac_val):int(len(X_weeks[0]) * frac_test)] for x_weeks in X_weeks]), np.concatenate([y[int(len(X[0]) * frac_val):int(len(X[0]) * frac_test)] for y in Y])
+else:
+    X_val, X_val_weeks, Y_val = np.concatenate([x[int(len(X[0]) * frac_val):int(len(X[0]) * frac_test)] for x in X]), np.concatenate([x_weeks[int(len(X_weeks[0]) * frac_val):int(len(X_weeks[0]) * frac_test)] for x_weeks in X_weeks]), np.concatenate([y[int(len(X[0]) * frac_val):int(len(X[0]) * frac_test)] for y in Y])
 states_val = []
 for st_here in [x[int(len(X[0]) * frac_val):int(len(X[0]) * frac_test)] for x in states_unflattened]:
     states_val.extend(st_here)
@@ -445,10 +452,16 @@ for st_here in [x[int(len(X[0]) * frac_test):] for x in states_unflattened]:
 # random.seed(seed)
 # Shuffle data
 perm = np.random.permutation(len(X_train))
-X_train, X_train_smart, X_train_weeks, Y_train, states_train = X_train[perm], X_train_smart[perm], X_train_weeks[perm], Y_train[perm], np.array(states_train)[perm].tolist()
+if len(X_smart) > 0:
+    X_train, X_train_smart, X_train_weeks, Y_train, states_train = X_train[perm], X_train_smart[perm], X_train_weeks[perm], Y_train[perm], np.array(states_train)[perm].tolist()
+else:
+    X_train, X_train_weeks, Y_train, states_train = X_train[perm], X_train_weeks[perm], Y_train[perm], np.array(states_train)[perm].tolist()
 
 perm = np.random.permutation(len(X_val))
-X_val, X_val_smart, X_val_weeks, Y_val, states_val = X_val[perm], X_val_smart[perm], X_val_weeks[perm], Y_val[perm], np.array(states_val)[perm].tolist()
+if len(X_smart) > 0:
+    X_val, X_val_smart, X_val_weeks, Y_val, states_val = X_val[perm], X_val_smart[perm], X_val_weeks[perm], Y_val[perm], np.array(states_val)[perm].tolist()
+else:
+    X_val, X_val_weeks, Y_val, states_val = X_val[perm], X_val_weeks[perm], Y_val[perm], np.array(states_val)[perm].tolist()
 
 perm = np.random.permutation(len(X_test))
 X_test, X_test_weeks, Y_test, states_test = X_test[perm], X_test_weeks[perm], Y_test[perm], np.array(states_test)[perm].tolist()
@@ -686,6 +699,26 @@ else:
     feat_enc = GRUEncoder(in_size=len(include_cols), out_dim=60,).to(device)
     seq_enc = GRUEncoder(in_size=1, out_dim=60,).to(device)
 
+if "fft" in options.optionals:
+    feat_enc_fft = GRUEncoder(in_size=len(include_cols), out_dim=60,).to(device)
+    seq_enc_fft = GRUEncoder(in_size=1, out_dim=60,).to(device)
+    fnp_enc = RegressionFNP2(
+        dim_x=120,
+        dim_y=1,
+        dim_h=100,
+        size_ref=X_ref.shape[0],
+        n_layers=3,
+        num_M=batch_size,
+        dim_u=60,
+        dim_z=60,
+        use_DAG=False,
+        use_ref_labels=False,
+        add_atten=False,
+        cnn=options.cnn,
+        rag=options.rag,
+        nn_A=options.nn
+    ).to(device)
+
 # np.random.seed(seed)
 # torch.manual_seed(seed)
 # random.seed(seed)
@@ -726,7 +759,7 @@ elif options.bert_emb:
     ).to(device)
 else:
     fnp_enc = RegressionFNP2(
-        dim_x=60,
+        dim_x=120,
         dim_y=1,
         dim_h=100,
         size_ref=X_ref.shape[0],
@@ -806,6 +839,8 @@ if day_ahead == 3:
 
 if "combine" in options.optionals:
     combine = Combine(len(include_cols), hidden_size_combine).to(device)
+if "fft" in options.optionals:
+    combine_fft = Combine(len(include_cols), hidden_size_combine).to(device)
 
 
 # Build dataset
@@ -1127,10 +1162,27 @@ else:
             + list(fnp_enc.parameters()),
             lr=lr,
         )
-
-kkk = 0 
 if "fft" in options.optionals:
-    X_ref = np.concatenate([X_ref, fft(X_ref).real, fft(X_ref).imag], axis=0)
+        if "combine" in options.optionals:
+            opt_fft = torch.optim.Adam(
+                list(combine_fft.parameters())
+                + list(seq_enc_fft.parameters())
+                + list(feat_enc_fft.parameters()),
+                lr=lr,
+            )
+        else:
+            opt_fft = torch.optim.Adam(
+                list(seq_enc_fft.parameters())
+                + list(feat_enc_fft.parameters()),
+                lr=lr,
+            )
+
+if "fft" in options.optionals:
+    X_ref_fft = fft(X_ref).real
+    X_ref_all = np.concatenate([X_ref, X_ref_fft], axis=0)
+else:
+    X_ref_all = X_ref
+kkk=0
 def train_step(data_loader, X, Y, X_ref):
     """
     Train step
@@ -1210,12 +1262,24 @@ def train_step(data_loader, X, Y, X_ref):
                     x_feat = feat_enc(past_values=inp,past_time_features=float_tensor(x_weeks).unsqueeze(2), past_observed_mask=mask).encoder_last_hidden_state[:,-1,:] # Final dimension is [128, 64]
                     
                 else:
-                    x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
                     if "combine" in options.optionals:
                         x_here = combine(x,x_smart)
                     else:
                         x_here = x
+
+                    x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
                     x_feat = feat_enc(x_here) # Converts [128, 119, 5] to [128, 60]
+
+                    if "fft" in options.optionals:
+                        x_here_fft = torch.fft.fft(combine_fft(x,x_smart)).real
+                        x_seq_fft = seq_enc_fft(float_tensor(X_ref_fft).unsqueeze(2))
+                        x_feat_fft = feat_enc_fft(x_here_fft) # Converts [128, 119, 5] to [128, 60]
+                        x_seq = torch.cat([x_seq, x_seq_fft], dim=-1)
+                        x_feat = torch.cat([x_feat, x_feat_fft], dim=-1)
+                        # loss_fft, yp_fft, _ = fnp_enc_fft(x_seq_fft, float_tensor(X_ref_fft), x_feat_fft, y)
+                        # yp_fft = yp_fft[X_ref.shape[0] :]
+                        # loss_fft.backward()
+                        # opt_fft.step()
 
                 loss, yp, _ = fnp_enc(x_seq, float_tensor(X_ref), x_feat, y)
                 yp = yp[X_ref.shape[0] :]
@@ -1224,6 +1288,8 @@ def train_step(data_loader, X, Y, X_ref):
                 if options.bert_emb or options.rag:
                     opt_bert.step()
                     # lr_scheduler.step()
+                # if "fft" in options.optionals:
+                #     yp = torch.mean(torch.cat([yp, yp_fft], dim=-1), dim=-1).unsqueeze(-1)
                 YP.append(yp.detach().cpu().numpy())
                 T_target.append(y.detach().cpu().numpy())
                 total_loss += loss.detach().cpu().numpy()
@@ -1488,17 +1554,26 @@ def val_step_with_states(data_loader, X, Y, X_ref, sample=True):
                         mask = float_tensor(torch.ones_like(inp))
                         x_feat = feat_enc(past_values=inp,past_time_features=float_tensor(x_weeks).unsqueeze(2), past_observed_mask=mask).encoder_last_hidden_state[:,-1,:] # Final dimension is [128, 64]
                     else:
-                        x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
                         if "combine" in options.optionals:
                             x_here = combine(x,x_smart)
                         else:
                             x_here = x
+
+                        x_seq = seq_enc(float_tensor(X_ref).unsqueeze(2))
                         x_feat = feat_enc(x_here) # Converts [128, 119, 5] to [128, 60]
+
+                        if "fft" in options.optionals:
+                            x_here_fft = torch.fft.fft(combine_fft(x,x_smart)).real
+                            x_seq_fft = seq_enc_fft(float_tensor(X_ref_fft).unsqueeze(2))
+                            x_feat_fft = feat_enc_fft(x_here_fft) # Converts [128, 119, 5] to [128, 60]
+                            x_seq = torch.cat([x_seq, x_seq_fft], dim=-1)
+                            x_feat = torch.cat([x_feat, x_feat_fft], dim=-1)
 
                 yp, _, vars, _, _, _, A = fnp_enc.predict(
                     x_feat, x_seq, float_tensor(X_ref), sample
                 )
-                # pu.db
+                # if "fft" in options.optionals:
+                #     yp = torch.mean(torch.cat([yp, yp_fft], dim=-1), dim=-1).unsqueeze(-1)
                 val_err += torch.pow(yp - y, 2).mean().sqrt().detach().cpu().numpy()
                 YP.extend(yp.detach().cpu().numpy().tolist())
                 T_target.extend(y.detach().cpu().numpy().tolist())
@@ -1628,7 +1703,7 @@ for ep in range(epochs):
     val_err, yp, yt, st, vars, As = val_step_with_states(val_loader_with_states, X_val, Y_val, X_ref)
     # val_err, yp, yt = val_step(val_loader, X_val, Y_val, X_ref)
     print(f"Val err: {val_err:.4f}")
-    all_results[ep] = {"pred": yp, "gt": yt, "states": st, "vars": vars, "As": As}
+    all_results[ep] = {"pred": yp, "gt": yt, "states": st, "vars": vars, "As": As, "train_err": train_err}
     # all_results[ep] = {"pred": yp, "gt": yt}
     if options.tb:
         writer.add_scalar('Train/RMSE', train_err, ep)

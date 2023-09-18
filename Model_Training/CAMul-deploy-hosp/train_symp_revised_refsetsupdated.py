@@ -682,7 +682,7 @@ train_loader = torch.utils.data.DataLoader(
     train_dataset, batch_size=batch_size, shuffle=True
 )
 val_loader = torch.utils.data.DataLoader(
-    val_dataset, batch_size=batch_size, shuffle=True
+    val_dataset, batch_size=batch_size, shuffle=False
 )
 # val_loader_with_states = torch.utils.data.DataLoader(
 #     val_dataset_with_states, batch_size=batch_size, shuffle=True

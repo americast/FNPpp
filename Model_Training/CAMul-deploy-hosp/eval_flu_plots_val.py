@@ -169,11 +169,11 @@ for mt, model_type in enumerate(tqdm(model_types)):
                     yp = np.array(yp)[poses_st].tolist()
                     y  = np.array(y)[poses_st].tolist()
                     v  = np.array(v)[poses_st].tolist()
-                rmse_here_inloop = rmse(np.array(yp), np.array(y))
+                rmse_here_inloop = rmse(np.array(yp)[:int(0.9*len(yp))], np.array(y)[:int(0.9*len(yp))])
                 if rmse_here_inloop < rmse_min:
-                    yp_to_consider = yp
-                    y_to_consider = y
-                    v_to_consider = v
+                    yp_to_consider = yp[int(0.9*len(yp)):]
+                    y_to_consider = y[int(0.9*len(yp)):]
+                    v_to_consider = v[int(0.9*len(yp)):]
                     rmse_min = rmse_here_inloop
             # pu.db
             # for a in range(0, len(list(data_pickle.keys())), 10):
@@ -187,7 +187,7 @@ for mt, model_type in enumerate(tqdm(model_types)):
             yp_this_week.extend(yp_to_consider)
             y_this_week.extend(y_to_consider)
             v_this_week.extend(v_to_consider)
-            rmse_mins.append(rmse_min)
+            rmse_mins.append(rmse(np.array(yp_to_consider), np.array(y_to_consider)))
             # yp = data_pickle[list(data_pickle.keys())[-1]]["pred"]
             # y  = data_pickle[list(data_pickle.keys())[-1]]["gt"]
             # pu.db

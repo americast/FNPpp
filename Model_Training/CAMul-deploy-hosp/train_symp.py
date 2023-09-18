@@ -34,7 +34,7 @@ parser = OptionParser()
 parser.add_option("-w", "--week", dest="week_ahead", type="int", default=2)
 parser.add_option("-y", "--year", dest="year", type="int", default=2020)
 parser.add_option("-n", "--num", dest="num", type="string")
-parser.add_option("-e", "--epoch", dest="epochs", type="int", default="3000")
+parser.add_option("-e", "--epoch", dest="epochs", type="int", default="1500")
 parser.add_option("-m", "--save", dest="save_model", default="default", type="string")
 parser.add_option("--seed", dest="seed", default=0, type="int")
 parser.add_option("--smart-mode", dest="smart_mode", default=0, type="int")
@@ -465,10 +465,14 @@ def train(train_seqs, train_symp_seqs, reg, mt, train_y):
 
         stoch_train_seq_fft = stoch_seq_enc_fft.forward(train_seq_fft)[0]
         stoch_train_symp_fft = stoch_symp_enc_fft.forward(train_symp_fft)[0]
-        ref_seq_fft = seq_encoder_fft.forward(float_tensor(seq_references))
-        ref_symp_fft = symp_encoder_fft.forward(float_tensor(symp_references))
-        stoch_ref_seq_fft = stoch_seq_enc_fft.forward(ref_seq)[0]
-        stoch_ref_symp_fft = stoch_symp_enc_fft.forward(ref_symp)[0]
+        if "ref" in options.optionals:
+            ref_seq_fft = seq_encoder_fft.forward(torch.fft.fft(float_tensor(seq_references)).real)
+            ref_symp_fft = symp_encoder_fft.forward(torch.fft.fft(float_tensor(symp_references)).real)
+        else:
+            ref_seq_fft = seq_encoder_fft.forward(float_tensor(seq_references))
+            ref_symp_fft = symp_encoder_fft.forward(float_tensor(symp_references))
+        stoch_ref_seq_fft = stoch_seq_enc_fft.forward(ref_seq_fft)[0]
+        stoch_ref_symp_fft = stoch_symp_enc_fft.forward(ref_symp_fft)[0]
 
         # Get view-aware latent embeddings
         train_seq_z_fft, train_seq_sr_fft, _, seq_loss_fft, _ = seq_corr_fft.forward(
@@ -524,11 +528,9 @@ def train(train_seqs, train_symp_seqs, reg, mt, train_y):
     losses.backward()
     opt.step()
     # print(f"Loss = {loss.detach().cpu().numpy()}")
-
+    mean_y = mean_y.cpu().detach().numpy()
     return (
-        mean_y.detach().cpu().numpy(),
-        losses.detach().cpu().numpy(),
-        loss.detach().cpu().numpy(),
+        (((mean_y - train_y) ** 2).mean()) ** 0.5
     )
 
 
@@ -573,10 +575,14 @@ def evaluate(test_seqs, test_symp_seqs, reg_test, mt_test, test_y, sample=True):
 
         stoch_test_seq_fft = stoch_seq_enc_fft.forward(test_seq_fft)[0]
         stoch_test_symp_fft = stoch_symp_enc_fft.forward(test_symp_fft)[0]
-        ref_seq_fft = seq_encoder_fft.forward(float_tensor(seq_references))
-        ref_symp_fft = symp_encoder_fft.forward(float_tensor(symp_references))
-        stoch_ref_seq_fft = stoch_seq_enc_fft.forward(ref_seq)[0]
-        stoch_ref_symp_fft = stoch_symp_enc_fft.forward(ref_symp)[0]
+        if "ref" in options.optionals:
+            ref_seq_fft = seq_encoder_fft.forward(torch.fft.fft(float_tensor(seq_references)).real)
+            ref_symp_fft = symp_encoder_fft.forward(torch.fft.fft(float_tensor(symp_references)).real)
+        else:
+            ref_seq_fft = seq_encoder_fft.forward(float_tensor(seq_references))
+            ref_symp_fft = symp_encoder_fft.forward(float_tensor(symp_references))
+        stoch_ref_seq_fft = stoch_seq_enc_fft.forward(ref_seq_fft)[0]
+        stoch_ref_symp_fft = stoch_symp_enc_fft.forward(ref_symp_fft)[0]
 
         # Get view-aware latent embeddings
         test_seq_z_fft, test_seq_sr_fft, _, seq_loss_fft, _ = seq_corr_fft.forward(
@@ -632,11 +638,11 @@ def evaluate(test_seqs, test_symp_seqs, reg_test, mt_test, test_y, sample=True):
 
 all_results = {}
 for ep in tqdm(range(1, epochs + 1)):
-    train(train_seqs, train_symp_seqs, reg, mt, train_y)
+    train_err = train(train_seqs, train_symp_seqs, reg, mt, train_y)
     if ep % 10 == 0:
         print("Evaluating")
         rmse_here, yp, yt = evaluate(test_seqs, test_symp_seqs, reg_test, mt_test, test_y)
-        all_results[ep] = {"rmse": rmse_here, "pred": yp, "gt": yt}
+        all_results[ep] = {"rmse": rmse_here, "pred": yp, "gt": yt, "train_err": train_err}
 
 if options.optionals != " ":
     options.save_model = options.save_model+"_optionals_"+options.optionals

@@ -151,12 +151,12 @@ for mt, model_type in enumerate(tqdm(model_types)):
             except:
                 pu.db
             # v  = data_pickle[list(data_pickle.keys())[key]]["vars"]
-            rmse_here_inloop = rmse(np.array(yp), np.array(y))
+            rmse_here_inloop = rmse(np.array(yp)[:int(0.9*len(yp))], np.array(y)[:int(0.9*len(yp))])
             if rmse_here_inloop < rmse_min:
-                yp_to_consider = yp
-                y_to_consider = y
+                yp_to_consider = yp[int(0.9*len(yp)):]
+                y_to_consider = y[int(0.9*len(yp)):]
                 # v_to_consider = v
-                rmse_min = rmse_here_inloop
+                rmse_min = rmse(np.array(yp_to_consider), np.array(y_to_consider))
 
         # As = []
         # for a in range(0, len(list(data_pickle.keys())), 10):
