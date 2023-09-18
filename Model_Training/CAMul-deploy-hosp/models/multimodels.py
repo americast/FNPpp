@@ -194,7 +194,7 @@ class Combine(nn.Module):
     Encoder for categorical values
     """
 
-    def __init__(self, in_size: int, hidden_size: int):
+    def __init__(self, in_size: int, hidden_size: int = 256):
         r"""
         ## Inputs
 
@@ -202,16 +202,15 @@ class Combine(nn.Module):
         :param out_dim: Output dimensions
         """
         super(Combine, self).__init__()
-        self.gru1 = nn.GRU(in_size, 1, batch_first=True)
-        self.gru2 = nn.GRU(in_size, 1, batch_first=True)
-        self.linear = nn.Linear(hidden_size, 1)
+        self.gru1 = nn.GRU(in_size, hidden_size, batch_first=True)
+        self.gru2 = nn.GRU(in_size, hidden_size, batch_first=True)
+        self.linear = nn.Linear(hidden_size*2, 1)
         self.act = nn.Sigmoid()
 
     def forward(self, batch_x, batch_x_avgd):
-        x1, _ = self.gru1(batch_x)
-        x2, _ = self.gru2(batch_x_avgd)
-        x1x2 = torch.cat([x1.squeeze(-1), x2.squeeze(-1)], axis=-1)
-        # pu.db
+        _, x1 = self.gru1(batch_x)
+        _, x2 = self.gru2(batch_x_avgd)
+        x1x2 = torch.cat([x1.squeeze(0), x2.squeeze(0)], axis=-1)
         weight = self.act(self.linear(x1x2)).unsqueeze(-1)
         # print(torch.mean(weight, dim=0))
         return weight * batch_x + (1-weight)*batch_x_avgd

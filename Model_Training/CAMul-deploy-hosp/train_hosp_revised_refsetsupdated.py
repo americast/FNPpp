@@ -831,16 +831,16 @@ def moving_wavg_35(x, kernel_size_2=5, kernel_size_1=3):
     # x = x.detach().numpy().tolist()
     return x[0][0]
 
-hidden_size_combine = 238
-if day_ahead == 2:
-    hidden_size_combine = 236
-if day_ahead == 3:
-    hidden_size_combine = 234
+# hidden_size_combine = 238
+# if day_ahead == 2:
+#     hidden_size_combine = 236
+# if day_ahead == 3:
+#     hidden_size_combine = 234
 
 if "combine" in options.optionals:
-    combine = Combine(len(include_cols), hidden_size_combine).to(device)
+    combine = Combine(len(include_cols)).to(device)
 if "fft" in options.optionals:
-    combine_fft = Combine(len(include_cols), hidden_size_combine).to(device)
+    combine_fft = Combine(len(include_cols)).to(device)
 
 
 # Build dataset

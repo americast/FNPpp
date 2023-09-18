@@ -367,14 +367,14 @@ models = [
     reg_corr,
     decoder,
 ]
-hidden_size_combine = 102
-if week_ahead == 2:
-    hidden_size_combine = 100
-if week_ahead == 3:
-    hidden_size_combine = 98
+# hidden_size_combine = 102
+# if week_ahead == 2:
+#     hidden_size_combine = 100
+# if week_ahead == 3:
+#     hidden_size_combine = 98
 if "combine" in options.optionals:
-    combine_seq = Combine(1, hidden_size_combine).to(device)
-    combine_symp = Combine(len(include_cols), hidden_size_combine).to(device)
+    combine_seq = Combine(1).to(device)
+    combine_symp = Combine(len(include_cols)).to(device)
     models += [
         combine_seq,
         combine_symp,
