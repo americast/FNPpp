@@ -121,7 +121,7 @@ X, X_symp, Y, mt, reg = [], [], [], [], []
 
 def sample_train(n_samples, window = 20):
     X, X_smart, X_symp, X_symp_smart, Y, mt, reg = [], [], [], [], [], [], []
-    start_seqs = np.random.randint(0, test_start - ahead, n_samples)
+    start_seqs = np.random.randint(0, test_start - ahead - window, n_samples)
     for start_seq in start_seqs:
         X.append(target[start_seq:start_seq+window, np.newaxis])
         X_smart.append(target_smart[start_seq:start_seq+window, np.newaxis])
@@ -141,7 +141,7 @@ def sample_train(n_samples, window = 20):
 
 def sample_test(n_samples, window = 20):
     X, X_smart, X_symp, X_symp_smart, Y, mt, reg = [], [], [], [], [], [], []
-    start_seqs = np.random.randint(test_start, total_time - ahead, n_samples)
+    start_seqs = np.random.randint(test_start, total_time - ahead - window, n_samples)
     for start_seq in start_seqs:
         X.append(target[start_seq:start_seq+window, np.newaxis])
         X_smart.append(target_smart[start_seq:start_seq+window, np.newaxis])
@@ -309,8 +309,10 @@ stoch_train_months = stoch_month_enc.forward(train_months)[0]
 stoch_train_seq = stoch_seq_enc.forward(train_seq)[0]
 stoch_train_symp = stoch_symp_enc.forward(train_symp)[0]
 stoch_train_reg = stoch_reg_enc.forward(train_reg)[0]
-
+A_seq_ffts, A_symp_ffts, A_seqs, A_symps = None,None,None,None
+A_seq_ffts_test, A_symp_ffts_test, A_seqs_test, A_symps_test = None,None,None,None
 def train(train_seqs, train_seqs_smart, train_symp_seqs, train_symp_seqs_smart, reg, mt, train_y):
+    global A_seq_ffts, A_symp_ffts, A_seqs, A_symps
     for m in models:
         m.train()
     opt.zero_grad()
@@ -364,28 +366,34 @@ def train(train_seqs, train_seqs_smart, train_symp_seqs, train_symp_seqs_smart, 
         stoch_ref_symp_fft = stoch_symp_enc_fft.forward(ref_symp_fft)[0]
 
         # Get view-aware latent embeddings
-        train_seq_z_fft, train_seq_sr_fft, _, seq_loss_fft, _ = seq_corr_fft.forward(
+        train_seq_z_fft, train_seq_sr_fft, _, seq_loss_fft, A_seq_ffts = seq_corr_fft.forward(
             stoch_ref_seq_fft, stoch_train_seq_fft, ref_seq_fft, train_seq_fft
         )
 
-        train_symp_z_fft, train_symp_sr_fft, _, symp_loss_fft, _ = symp_corr_fft.forward(
+        train_symp_z_fft, train_symp_sr_fft, _, symp_loss_fft, A_symp_ffts = symp_corr_fft.forward(
             stoch_ref_symp_fft, stoch_train_symp_fft, ref_symp_fft, train_symp_fft
         )
+
+        # A_seq_ffts.append(A_seq_fft)
+        # A_symp_ffts.append(A_symp_fft)
 
 
     # Get view-aware latent embeddings
     train_months_z, train_month_sr, _, month_loss, _ = month_corr.forward(
         stoch_ref_months, stoch_train_months, ref_months, train_months
     )
-    train_seq_z, train_seq_sr, _, seq_loss, _ = seq_corr.forward(
+    train_seq_z, train_seq_sr, _, seq_loss, A_seqs = seq_corr.forward(
         stoch_ref_seq, stoch_train_seq, ref_seq, train_seq
     )
-    train_symp_z, train_symp_sr, _, symp_loss, _ = symp_corr.forward(
+    train_symp_z, train_symp_sr, _, symp_loss, A_symps = symp_corr.forward(
         stoch_ref_symp, stoch_train_symp, ref_symp, train_symp
     )
     train_reg_z, train_reg_sr, _, reg_loss, _ = reg_corr.forward(
         stoch_ref_reg, stoch_train_reg, ref_reg, train_reg
     )
+
+    # A_seq_ffts.append(A_seq)
+    # A_symp_ffts.append(A_symp)
 
     # Concat all latent embeddings
     if "fft" in options.optionals:
@@ -422,6 +430,8 @@ def train(train_seqs, train_seqs_smart, train_symp_seqs, train_symp_seqs_smart, 
 
 
 def evaluate(test_seqs, test_seqs_smart, test_symp_seqs, test_symp_seqs_smart, reg_test, mt_test, test_y, sample=True):
+    global A_seq_ffts_test, A_symp_ffts_test, A_seqs_test, A_symps_test
+
     for m in models:
         m.eval()
     # Porbabilistic encode of reference points
@@ -471,11 +481,11 @@ def evaluate(test_seqs, test_seqs_smart, test_symp_seqs, test_symp_seqs_smart, r
         stoch_ref_symp_fft = stoch_symp_enc_fft.forward(ref_symp_fft)[0]
 
         # Get view-aware latent embeddings
-        test_seq_z_fft, test_seq_sr_fft, _, seq_loss_fft, _ = seq_corr_fft.forward(
+        test_seq_z_fft, test_seq_sr_fft, _, seq_loss_fft, A_seq_ffts_test = seq_corr_fft.forward(
             stoch_ref_seq_fft, stoch_test_seq_fft, ref_seq_fft, test_seq_fft
         )
 
-        test_symp_z_fft, test_symp_sr_fft, _, symp_loss_fft, _ = symp_corr_fft.forward(
+        test_symp_z_fft, test_symp_sr_fft, _, symp_loss_fft, A_symp_ffts_test = symp_corr_fft.forward(
             stoch_ref_symp_fft, stoch_test_symp_fft, ref_symp_fft, test_symp_fft
         )
 
@@ -483,10 +493,10 @@ def evaluate(test_seqs, test_seqs_smart, test_symp_seqs, test_symp_seqs_smart, r
     test_months_z, test_month_sr, _, _, _, _ = month_corr.predict(
         stoch_ref_months, stoch_test_months, ref_months, test_months
     )
-    test_seq_z, test_seq_sr, _, _, _, _ = seq_corr.predict(
+    test_seq_z, test_seq_sr, _, _, _, A_seqs_test = seq_corr.predict(
         stoch_ref_seq, stoch_test_seq, ref_seq, test_seq
     )
-    test_symp_z, test_symp_sr, _, _, _, _ = symp_corr.predict(
+    test_symp_z, test_symp_sr, _, _, _, A_symps_test = symp_corr.predict(
         stoch_ref_symp, stoch_test_symp, ref_symp, test_symp
     )
     test_reg_z, test_reg_sr, _, _, _, _ = reg_corr.predict(
@@ -544,3 +554,29 @@ for ep in range(1, 2000 + 1):
 f = open("power_results/ahead_"+str(ahead)+"_optionals_"+str(options.optionals)+"_seed_"+str(seed), "w")
 f.write("RMSE:"+str(rmse)+"\n")
 f.write("CRPS:"+str(crps)+"\n")
+# plt.imshow(A_seq_ffts.detach().cpu().numpy(), cmap="hot", interpolation='nearest')
+# plt.colorbar()
+# plt.savefig("plots_power/A_seq_ffts.png")
+# plt.imshow(A_symp_ffts.detach().cpu().numpy(), cmap="hot", interpolation='nearest')
+# plt.colorbar()
+# plt.savefig("plots_power/A_symp_ffts.png")
+# plt.imshow(A_seqs.detach().cpu().numpy(), cmap="hot", interpolation='nearest')
+# plt.colorbar()
+# plt.savefig("plots_power/A_seqs.png")
+# plt.imshow(A_symps.detach().cpu().numpy(), cmap="hot", interpolation='nearest')
+# plt.colorbar()
+# plt.savefig("plots_power/A_symps.png")
+
+# plt.imshow(A_seq_ffts_test.detach().cpu().numpy(), cmap="hot", interpolation='nearest')
+# plt.colorbar()
+# plt.savefig("plots_power/A_seq_ffts_test.png")
+# plt.imshow(A_symp_ffts_test.detach().cpu().numpy(), cmap="hot", interpolation='nearest')
+# plt.colorbar()
+# plt.savefig("plots_power/A_symp_ffts_test.png")
+# plt.imshow(A_seqs_test.detach().cpu().numpy(), cmap="hot", interpolation='nearest')
+# plt.colorbar()
+# plt.savefig("plots_power/A_seqs_test.png")
+# plt.imshow(A_symps_test.detach().cpu().numpy(), cmap="hot", interpolation='nearest')
+# plt.colorbar()
+# plt.savefig("plots_power/A_symps_test.png")
+# pu.db
