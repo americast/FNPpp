@@ -15,7 +15,7 @@ parser.add_option("--nn", dest="nn", default="none", type="choice", choices=["no
 parser.add_option("--auto-size-best-num", dest="auto_size_best_num", default=None, type="int")
 parser.add_option("--seed", dest="seed", default=0, type="int")
 parser.add_option("--smart-mode", dest="smart_mode", default=0, type="int")
-
+parser.add_option("--optionals", dest="optionals", default=" ", type="str")
 # epiweeks = list(range(202101, 202153))
 (options, args) = parser.parse_args()
 # pu.db
@@ -161,6 +161,8 @@ for pat in patience:
                                 str(options.window_stride),
                                 "--sliding-window-size",
                                 str(options.window_size),
+                                "--optionals",
+                                str(options.optionals),
                             ] + to_run
                     
                     subprocess.run(

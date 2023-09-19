@@ -19,6 +19,8 @@ parser.add_option("-m", "--model_type", dest="model_type", default="normal", typ
 parser.add_option("--size", dest="window_size", default=10, type="int")
 parser.add_option("--stride", dest="window_stride", default=10, type="int")
 parser.add_option("--seed", dest="seed", default=0, type="int")
+parser.add_option("--optionals", dest="optionals", type="string", default=" ")
+
 # parser.add_option("-f", "--files", dest="file_names", default="sliding_model_"+str(options.epiweek)+"_True_0.001_500_4", type="string")
 # parser.add_option("-f", "--files", dest="file_names", default="sliding_model_"+str(options.epiweek)+"_True_0.001_500_4", type="string")
 # parser.add_option("-s", "--state", dest="state", default="AR", type="string")
@@ -128,7 +130,10 @@ for mt, model_type in enumerate(tqdm(model_types)):
             elif "nn-bert" in model_type:
                 disease_here = disease_here + "_nn-bert"
         
-        file_to_load = save_model + "_predictions.pkl"
+        if options.optionals != " ":
+            file_to_load = save_model+"_optionals_"+options.optionals+"_predictions.pkl"
+        else:
+            file_to_load = save_model + "_predictions.pkl"
         if "slidingwindow" in model_type or "preprocess" in model_type:
             directory = "/localscratch/ssinha97/fnp_evaluations/"+disease_here+"_val_predictions_slidingwindow"
         else:
@@ -142,12 +147,12 @@ for mt, model_type in enumerate(tqdm(model_types)):
             yp = data_pickle[list(data_pickle.keys())[key]]["pred"].tolist()
             y  = data_pickle[list(data_pickle.keys())[key]]["gt"].tolist()
             v  = data_pickle[list(data_pickle.keys())[key]]["vars"]
-            rmse_here_inloop = rmse(np.array(yp), np.array(y))
+            rmse_here_inloop = rmse(np.array(yp)[:int(0.9*len(yp))], np.array(y)[:int(0.9*len(yp))])
             if rmse_here_inloop < rmse_min:
-                yp_to_consider = yp
-                y_to_consider = y
-                v_to_consider = v
-                rmse_min = rmse_here_inloop
+                yp_to_consider = yp[int(0.9*len(yp)):]
+                y_to_consider = y[int(0.9*len(yp)):]
+                v_to_consider = v[int(0.9*len(yp)):]
+                rmse_min = rmse(np.array(yp_to_consider), np.array(y_to_consider))
         
         # pu.db
         # yp_this_week

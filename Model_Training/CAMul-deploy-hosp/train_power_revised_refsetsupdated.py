@@ -18,12 +18,14 @@ from models.multimodels import (
     LatentEncoder,
     CorrEncoder,
     Decoder,
+    Combine
 )
 from models.fnpmodels import RegressionFNP2
 from tqdm import tqdm
 from itertools import product
 from scipy.signal import argrelextrema
 from copy import deepcopy
+from functools import reduce
 
 parser = OptionParser()
 # parser.add_option("-p", "--epiweek_pres", dest="epiweek_pres", default="202240", type="string")
@@ -49,6 +51,8 @@ parser.add_option("--cnn", dest="cnn", action="store_true", default=False)
 parser.add_option("--rag", dest="rag", action="store_true", default=False)
 parser.add_option("--nn", dest="nn", default="none", type="choice", choices=["none", "simple", "bn", "dot", "bert"])
 parser.add_option("--smart-mode", dest="smart_mode", default=0, type="int")
+parser.add_option("--optionals", dest="optionals", default=" ", type="str")
+
 (options, args) = parser.parse_args()
 # epiweek_pres = options.epiweek_pres
 # epiweek = options.epiweek
@@ -322,12 +326,14 @@ test_end = int(total_time * 0.9)
 X, X_symp, Y, mt, reg = [], [], [], [], []
 
 def sample_train(n_samples, window = 20):
-    X, X_symp, Y, mt, reg = [], [], [], [], []
+    X, X_smart, X_symp, X_symp_smart, Y, mt, reg = [], [], [], [], [], [], []
     start_seqs = np.random.randint(0, test_start, n_samples)
     for start_seq in start_seqs:
         if options.smart_mode == 2 or options.smart_mode == 3 or options.smart_mode == 5 or options.smart_mode == 8:
-            X.append(target_avg[start_seq:start_seq+window, np.newaxis])
-            X_symp.append(features_avg[start_seq:start_seq+window])
+            X.append(target[start_seq:start_seq+window, np.newaxis])
+            X_symp.append(features[start_seq:start_seq+window])
+            X_smart.append(target_avg[start_seq:start_seq+window, np.newaxis])
+            X_symp_smart.append(features_avg[start_seq:start_seq+window])
         else:
             X.append(target[start_seq:start_seq+window, np.newaxis])
             X_symp.append(features[start_seq:start_seq+window])
@@ -340,18 +346,22 @@ def sample_train(n_samples, window = 20):
         reg.append(tod[start_seq+window])
     X = np.array(X)
     X_symp = np.array(X_symp)
+    X_smart = np.array(X_smart)
+    X_symp_smart = np.array(X_symp_smart)
     Y = np.array(Y)
     mt = np.array(mt)
     reg = np.array(reg)
-    return X, X_symp, Y, mt, reg
+    return X, X_smart, X_symp, X_symp_smart, Y, mt, reg
 
 def sample_val(n_samples, window = 20):
-    X, X_symp, Y, mt, reg = [], [], [], [], []
+    X, X_smart, X_symp, X_symp_smart, Y, mt, reg = [], [], [], [], [], [], []
     start_seqs = np.random.randint(test_start, test_end-(window - (options.day_ahead -1)), n_samples)
     for start_seq in start_seqs:
         if options.smart_mode == 2 or options.smart_mode == 3 or options.smart_mode == 5 or options.smart_mode == 8:
-            X.append(target_avg[start_seq:start_seq+window, np.newaxis])
-            X_symp.append(features_avg[start_seq:start_seq+window])
+            X.append(target[start_seq:start_seq+window, np.newaxis])
+            X_symp.append(features[start_seq:start_seq+window])
+            X_smart.append(target_avg[start_seq:start_seq+window, np.newaxis])
+            X_symp_smart.append(features_avg[start_seq:start_seq+window])
         else:
             X.append(target[start_seq:start_seq+window, np.newaxis])
             X_symp.append(features[start_seq:start_seq+window])
@@ -364,26 +374,32 @@ def sample_val(n_samples, window = 20):
         reg.append(tod[start_seq+window])
     X = np.array(X)
     X_symp = np.array(X_symp)
+    X_smart = np.array(X_smart)
+    X_symp_smart = np.array(X_symp_smart)
     Y = np.array(Y)
     mt = np.array(mt)
     reg = np.array(reg)
-    return X, X_symp, Y, mt, reg
+    return X, X_smart, X_symp, X_symp_smart, Y, mt, reg
 
 def sample_test(n_samples, window = 20):
-    X, X_symp, Y, mt, reg = [], [], [], [], []
+    X, X_smart, X_symp, X_symp_smart, Y, mt, reg = [], [], [], [], [], [], []
     start_seqs = np.random.randint(test_end, total_time-(window - (options.day_ahead -1)), n_samples)
     for start_seq in start_seqs:
         X.append(target[start_seq:start_seq+window, np.newaxis])
         X_symp.append(features[start_seq:start_seq+window])
+        X_smart.append(target_avg[start_seq:start_seq+window, np.newaxis])
+        X_symp_smart.append(features_avg[start_seq:start_seq+window])
         Y.append(target[start_seq+window+(options.day_ahead - 1)])
         mt.append(month[start_seq+window])
         reg.append(tod[start_seq+window])
     X = np.array(X)
     X_symp = np.array(X_symp)
+    X_smart = np.array(X_smart)
+    X_symp_smart = np.array(X_symp_smart)
     Y = np.array(Y)
     mt = np.array(mt)
     reg = np.array(reg)
-    return X, X_symp, Y, mt, reg
+    return X, X_smart, X_symp, X_symp_smart, Y, mt, reg
 # pu.db
 
 # Reference points
@@ -396,42 +412,42 @@ def sample_test(n_samples, window = 20):
 # month_references = np.arange(12)
 # reg_references = np.arange(4)
 # splits = 4
-if options.smart_mode != 0:
-    features_avg = np.zeros_like(features)
-    kernel_size = 3
-    avg = torch.nn.AvgPool1d(kernel_size=kernel_size, stride=1, padding=0)
-    def moving_avg(x, kernel_size=kernel_size):
-        # padding on the both ends of time series
-        front = x[0:1].repeat((kernel_size - 1) // 2)
-        end = x[-1:].repeat((kernel_size - 1) // 2)
-        x = np.concatenate([front, x, end]).tolist()
-        with torch.no_grad():
-            x = avg(torch.tensor([[x]]))
-        x = x.detach().numpy().tolist()
-        return np.array(x[0][0])
-    for i in tqdm(range(features.shape[1])):
-        rw = features[:, i]
-        rw_here = moving_avg(rw)
-        features_avg[:, i] = rw_here
-        if i == label_idx:
-            target_avg = rw_here
-    kernel_size = 5
-    avg = torch.nn.AvgPool1d(kernel_size=kernel_size, stride=1, padding=0)
-    def moving_avg(x, kernel_size=kernel_size):
-        # padding on the both ends of time series
-        front = x[0:1].repeat((kernel_size - 1) // 2)
-        end = x[-1:].repeat((kernel_size - 1) // 2)
-        x = np.concatenate([front, x, end]).tolist()
-        with torch.no_grad():
-            x = avg(torch.tensor([[x]]))
-        x = x.detach().numpy().tolist()
-        return np.array(x[0][0])
-    for i in tqdm(range(features.shape[1])):
-        rw = features_avg[:, i]
-        rw_here = moving_avg(rw)
-        features_avg[:, i] = rw_here
-        if i == label_idx:
-            target_avg = rw_here
+# if options.smart_mode != 0:
+features_avg = np.zeros_like(features)
+kernel_size = 3
+avg = torch.nn.AvgPool1d(kernel_size=kernel_size, stride=1, padding=0)
+def moving_avg(x, kernel_size=kernel_size):
+    # padding on the both ends of time series
+    front = x[0:1].repeat((kernel_size - 1) // 2)
+    end = x[-1:].repeat((kernel_size - 1) // 2)
+    x = np.concatenate([front, x, end]).tolist()
+    with torch.no_grad():
+        x = avg(torch.tensor([[x]]))
+    x = x.detach().numpy().tolist()
+    return np.array(x[0][0])
+for i in tqdm(range(features.shape[1])):
+    rw = features[:, i]
+    rw_here = moving_avg(rw)
+    features_avg[:, i] = rw_here
+    if i == label_idx:
+        target_avg = rw_here
+kernel_size = 5
+avg = torch.nn.AvgPool1d(kernel_size=kernel_size, stride=1, padding=0)
+def moving_avg(x, kernel_size=kernel_size):
+    # padding on the both ends of time series
+    front = x[0:1].repeat((kernel_size - 1) // 2)
+    end = x[-1:].repeat((kernel_size - 1) // 2)
+    x = np.concatenate([front, x, end]).tolist()
+    with torch.no_grad():
+        x = avg(torch.tensor([[x]]))
+    x = x.detach().numpy().tolist()
+    return np.array(x[0][0])
+for i in tqdm(range(features.shape[1])):
+    rw = features_avg[:, i]
+    rw_here = moving_avg(rw)
+    features_avg[:, i] = rw_here
+    if i == label_idx:
+        target_avg = rw_here
 
     # pu.db
 
@@ -439,10 +455,11 @@ if options.smart_mode == 2 or options.smart_mode == 3 or options.smart_mode == 4
     X_ref = features_avg
 else:
     X_ref = features
+X_ref_smart = features_avg
 # pu.db
-train_seqs, X_train, Y_train, mt, reg = sample_train(options.batch_size)
-val_seqs, X_val, Y_val, mt_val, reg_val = sample_val(options.batch_size)
-test_seqs, X_test, Y_test, mt_test, reg_test = sample_test(options.batch_size)
+train_seqs, train_seqs_smart, X_train, X_train_smart, Y_train, mt, reg = sample_train(options.batch_size)
+val_seqs, val_seqs_smart, X_val, X_val_smart, Y_val, mt_val, reg_val = sample_val(options.batch_size)
+test_seqs, test_seqs_smart, X_test, X_test_smart, Y_test, mt_test, reg_test = sample_test(options.batch_size)
 # pu.db
 
 kernel_size = 25
@@ -521,7 +538,6 @@ if options.sliding_window:
                 max_len = len(tc)
         for t, tc in enumerate(to_concat):
             to_concat[t] = np.expand_dims(np.array([-100 for x in range(max_len-len(tc))] + tc), axis=0)
-        pu.db
         X_ref = np.expand_dims(np.concatenate(to_concat), axis=-1)
         print(X_ref.shape)
     elif options.auto_size_best_num is not None:
@@ -619,6 +635,26 @@ fnp_enc = RegressionFNP2(
     nn_A=options.nn
 ).to(device)
 
+if "fft" in options.optionals:
+    feat_enc_fft = GRUEncoder(in_size=7, out_dim=60,).to(device)
+    seq_enc_fft = GRUEncoder(in_size=1, out_dim=60,).to(device)
+    fnp_enc = RegressionFNP2(
+        dim_x=120,
+        dim_y=1,
+        dim_h=100,
+        size_ref=X_ref.shape[0],
+        n_layers=3,
+        num_M=batch_size,
+        dim_u=60,
+        dim_z=60,
+        use_DAG=False,
+        use_ref_labels=False,
+        add_atten=False,
+        cnn=options.cnn,
+        rag=options.rag,
+        nn_A=options.nn
+    ).to(device)
+    combine_fft = Combine(7).to(device)
 
 def load_model(folder, file=save_model_name):
     """
@@ -656,6 +692,22 @@ class SeqData(torch.utils.data.Dataset):
             float_tensor(self.X[idx, :, :]),
             float_tensor(self.Y[idx]),
         )
+    
+class SeqDataSmart(torch.utils.data.Dataset):
+    def __init__(self, X, X_smart, Y):
+        self.X = X
+        self.X_smart = X_smart
+        self.Y = Y[:, None]
+
+    def __len__(self):
+        return self.X.shape[0]
+
+    def __getitem__(self, idx):
+        return (
+            float_tensor(self.X[idx, :, :]),
+            float_tensor(self.X_smart[idx, :, :]),
+            float_tensor(self.Y[idx]),
+        )
 
 # Build dataset with state info
 class SeqDataWithStates(torch.utils.data.Dataset):
@@ -677,27 +729,33 @@ class SeqDataWithStates(torch.utils.data.Dataset):
         except:
             pu.db
 
-train_dataset = SeqData(X_train, Y_train)
-val_dataset = SeqData(X_val, Y_val)
+train_dataset = SeqDataSmart(X_train, X_train_smart, Y_train)
+val_dataset = SeqDataSmart(X_val, X_val_smart, Y_val)
 val_dataset_with_states = SeqData(X_val, Y_val)
 train_loader = torch.utils.data.DataLoader(
     train_dataset, batch_size=batch_size, shuffle=True
 )
 val_loader = torch.utils.data.DataLoader(
-    val_dataset, batch_size=batch_size, shuffle=True
+    val_dataset, batch_size=batch_size, shuffle=False
 )
 val_loader_with_states = torch.utils.data.DataLoader(
-    val_dataset_with_states, batch_size=batch_size, shuffle=True
+    val_dataset_with_states, batch_size=batch_size, shuffle=False
 )
 if start_model != "None":
     load_model("./"+disease+"power_models", file=start_model)
     print("Loaded model from", start_model)
 
+models_to_train = [seq_enc, feat_enc, fnp_enc]
+
+if "combine" in options.optionals:
+    combine = Combine(7).to(device)
+    models_to_train += [combine]
+
+if "fft" in options.optionals:
+    models_to_train += [seq_enc_fft, feat_enc_fft, combine_fft]
+
 opt = torch.optim.Adam(
-    list(seq_enc.parameters())
-    + list(feat_enc.parameters())
-    + list(fnp_enc.parameters()),
-    lr=lr,
+    reduce(lambda x, y: x + y, [list(m.parameters()) for m in models_to_train]), lr=lr,
 )
 
 
@@ -705,17 +763,30 @@ def train_step(data_loader, X, Y, X_ref):
     """
     Train step
     """
-    feat_enc.train()
-    seq_enc.train()
-    fnp_enc.train()
+    for model in models_to_train:
+        model.train()
     total_loss = 0.0
     train_err = 0.0
     YP = []
     T_target = []
-    for i, (x, y) in enumerate(data_loader):
+    for i, (x, x_smart, y) in enumerate(data_loader):
         opt.zero_grad()
+        if "combine" in options.optionals:
+            x_here = combine(x,x_smart)
+        elif options.smart_mode == 8:
+            x_here = x_smart
+        else:
+            x_here = x
         x_seq = seq_enc(float_tensor(X_ref))
-        x_feat = feat_enc(x)
+        x_feat = feat_enc(x_here)
+
+        if "fft" in options.optionals:
+            x_here_fft = torch.fft.fft(combine_fft(x,x_smart)).real
+            x_seq_fft = seq_enc_fft(float_tensor(X_ref))
+            x_feat_fft = feat_enc_fft(x_here_fft) # Converts [128, 119, 5] to [128, 60]
+            x_seq = torch.cat([x_seq, x_seq_fft], dim=-1)
+            x_feat = torch.cat([x_feat, x_feat_fft], dim=-1)
+
         loss, yp, _ = fnp_enc(x_seq, float_tensor(X_ref), x_feat, y)
         yp = yp[X_ref.shape[0] :]
         loss.backward()
@@ -737,18 +808,29 @@ def val_step(data_loader, X, Y, X_ref, sample=True):
     Validation step
     """
     with torch.set_grad_enabled(False):
-        feat_enc.eval()
-        seq_enc.eval()
-        fnp_enc.eval()
+        for model in models_to_train:
+            model.eval()
         val_err = 0.0
         YP = []
         T_target = []
         all_vars = []
         all_As = []
         # load_model("/localscratch/ssinha97/"+disease+"power_models")
-        for i, (x, y) in enumerate(data_loader):
+        for i, (x, x_smart, y) in enumerate(data_loader):
             x_seq = seq_enc(float_tensor(X_ref))
-            x_feat = feat_enc(x)
+            if "combine" in options.optionals:
+                x_here = combine(x,x_smart)
+            elif options.smart_mode == 8:
+                x_here = x_smart
+            else:
+                x_here = x
+            x_feat = feat_enc(x_here)
+            if "fft" in options.optionals:
+                x_here_fft = torch.fft.fft(combine_fft(x,x_smart)).real
+                x_seq_fft = seq_enc_fft(float_tensor(X_ref))
+                x_feat_fft = feat_enc_fft(x_here_fft) # Converts [128, 119, 5] to [128, 60]
+                x_seq = torch.cat([x_seq, x_seq_fft], dim=-1)
+                x_feat = torch.cat([x_feat, x_feat_fft], dim=-1)
             yp, _, vars, _, _, _, A = fnp_enc.predict(
                 x_feat, x_seq, float_tensor(X_ref), sample
             )
@@ -851,6 +933,9 @@ for ep in range(epochs):
     print()
     if ep > 100 and ep - min_val_epoch > patience:
         break
+
+if options.optionals != " ":
+    save_model_name = save_model_name+"_optionals_"+options.optionals
 
 if options.sliding_window:
     os.makedirs(f"/localscratch/ssinha97/fnp_evaluations/"+disease+"_val_predictions_slidingwindow", exist_ok=True)
