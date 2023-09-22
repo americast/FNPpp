@@ -14,6 +14,7 @@ parser.add_option("--rag", dest="rag", action="store_true", default=False)
 parser.add_option("--nn", dest="nn", default="none", type="choice", choices=["none", "simple", "bn", "dot", "bert"])
 parser.add_option("--bert", dest="bert", action="store_true", default=False)
 parser.add_option("--smart-mode", dest="smart_mode", default=0, type="int")
+parser.add_option("--optionals", dest="optionals", default=" ", type="str")
 
 # 1 divide ref sets as per new rule
 # 2 use smoothing throughout (even for output)
@@ -172,6 +173,8 @@ for pat in patience:
                                 "--tb",
                                 "--disease",
                                 str(options.disease),
+                                "--optionals",
+                                options.optionals
                         ] + to_run
                     print(f"Training {save_model}")
                     subprocess.run(

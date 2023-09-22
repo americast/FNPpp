@@ -203,7 +203,7 @@ if options.smart_mode == 7:
     conv_here_2.weight.data = (torch.ones_like(conv_here_2.weight.data)/5).to(device)
     conv_here_2.bias.data = torch.zeros(1).to(device)
 
-if options.smart_mode >= 2:
+if options.smart_mode >= 2 or "combine" in options.optionals or "fft" in options.optionals:
     raw_data_unavgd = deepcopy(raw_data)
     kernel_size = 3
     avg = torch.nn.AvgPool1d(kernel_size=kernel_size, stride=1, padding=0)
@@ -390,7 +390,7 @@ X, X_smart, Y = [], [], []
 X_weeks = []
 for i, st in enumerate(states):
     if st in states_to_consider:
-        if options.smart_mode == 3 or options.smart_mode == 4 or options.smart_mode == 5 or options.smart_mode == 8:
+        if options.smart_mode == 3 or options.smart_mode == 4 or options.smart_mode == 5 or options.smart_mode == 8  or "combine" in options.optionals or "fft" in options.optionals:
             x, x_smart, y = prefix_sequences_sm3(raw_data[i], raw_data_unavgd[i])
             X_smart.append(x_smart)
         else:
@@ -560,8 +560,8 @@ if options.smart_mode == 1 or options.smart_mode == 4 or options.smart_mode == 8
 # if options.smart_mode == 4:
 #     X_ref_average_2 = X_ref
 
-if options.sliding_window or options.smart_mode == 8:
-    if options.smart_mode == 1 or options.smart_mode == 4 or options.smart_mode == 8:
+if options.sliding_window or options.smart_mode == 8 or options.smart_mode == 1 or "part" in options.optionals:
+    if options.smart_mode == 1 or options.smart_mode == 4 or options.smart_mode == 8 or "part" in options.optionals:
         X_ref_orig_shape = X_ref.shape
         to_concat = []
         to_concat_weeks = []
@@ -635,7 +635,7 @@ if options.sliding_window or options.smart_mode == 8:
         try:
             X_ref = np.concatenate(to_concat)
         except: pu.db
-        raw_data_weeks = np.concatenate(to_concat_weeks)
+        # raw_data_weeks = np.concatenate(to_concat_weeks)
 
 
 
@@ -722,7 +722,7 @@ if "fft" in options.optionals:
 # np.random.seed(seed)
 # torch.manual_seed(seed)
 # random.seed(seed)
-if options.smart_mode == 8:
+elif options.smart_mode == 8:
     fnp_enc = RegressionFNP2(
         dim_x=60,
         dim_y=1,
@@ -758,40 +758,22 @@ elif options.bert_emb:
         nn_A=options.nn
     ).to(device)
 else:
-    if "combine" in options.optionals:
-        fnp_enc = RegressionFNP2(
-            dim_x=120,
-            dim_y=1,
-            dim_h=100,
-            size_ref=X_ref.shape[0],
-            n_layers=3,
-            num_M=batch_size,
-            dim_u=60,
-            dim_z=60,
-            use_DAG=False,
-            use_ref_labels=False,
-            add_atten=False,
-            cnn=options.cnn,
-            rag=options.rag,
-            nn_A=options.nn
-        ).to(device)
-    else:
-        fnp_enc = RegressionFNP2(
-            dim_x=60,
-            dim_y=1,
-            dim_h=100,
-            size_ref=X_ref.shape[0],
-            n_layers=3,
-            num_M=batch_size,
-            dim_u=60,
-            dim_z=60,
-            use_DAG=False,
-            use_ref_labels=False,
-            add_atten=False,
-            cnn=options.cnn,
-            rag=options.rag,
-            nn_A=options.nn
-        ).to(device)
+    fnp_enc = RegressionFNP2(
+        dim_x=60,
+        dim_y=1,
+        dim_h=100,
+        size_ref=X_ref.shape[0],
+        n_layers=3,
+        num_M=batch_size,
+        dim_u=60,
+        dim_z=60,
+        use_DAG=False,
+        use_ref_labels=False,
+        add_atten=False,
+        cnn=options.cnn,
+        rag=options.rag,
+        nn_A=options.nn
+    ).to(device)
 
 
 def load_model(folder, file=save_model_name):
@@ -1086,7 +1068,7 @@ class SeqDataWithStatesSmart(torch.utils.data.Dataset):
             )
         except:
             pu.db
-if options.smart_mode == 3 or options.smart_mode == 4 or options.smart_mode == 5 or options.smart_mode == 8:
+if options.smart_mode == 3 or options.smart_mode == 4 or options.smart_mode == 5 or options.smart_mode == 8 or "combine" in options.optionals or "fft" in options.optionals:
     train_dataset = SeqDataWithWeeksSmart(X_train, X_train_smart, X_train_weeks, Y_train)
     val_dataset_with_states = SeqDataWithStatesSmart(X_val, X_val_smart, X_val_weeks, Y_val, states_val)
 else:
@@ -1261,7 +1243,7 @@ def train_step(data_loader, X, Y, X_ref):
                 # pu.db
     else:
         # pu.db
-        if options.smart_mode == 3 or options.smart_mode == 4 or options.smart_mode == 5 or options.smart_mode == 8:
+        if options.smart_mode == 3 or options.smart_mode == 4 or options.smart_mode == 5 or options.smart_mode == 8 or "combine" in options.optionals or "fft" in options.optionals:
             for i, (x, x_smart, x_weeks, y) in enumerate(data_loader):
                 # if kkk:
                 #     pu.db
@@ -1564,7 +1546,7 @@ def val_step_with_states(data_loader, X, Y, X_ref, sample=True):
                     states_here.extend(st)
                     all_As = [] 
         else:
-            if options.smart_mode == 3 or options.smart_mode == 4 or options.smart_mode == 5 or options.smart_mode == 8:
+            if options.smart_mode == 3 or options.smart_mode == 4 or options.smart_mode == 5 or options.smart_mode == 8 or "combine" in options.optionals or "fft" in options.optionals:
                 for i, (x, x_smart, x_weeks, y, st) in enumerate(data_loader):
                     if options.bert_emb:
                         inp = float_tensor(X_ref).unsqueeze(2)

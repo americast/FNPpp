@@ -3,6 +3,9 @@ import numpy as np
 import pudb
 import scipy.fft as fft
 import warnings
+
+plt.rcParams.update({'font.size': 19})
+
 y = np.array([ -0.6903, -0.4755, -0.4666, -0.3771, -0.3502,
         -0.3234, -0.3323, -0.3771, -0.3950, -0.1712,  0.0256, -0.3144, -0.2249,
         -0.2160, -0.1086, -0.2965,  0.1330, -0.2160, -0.2518, -0.2697, -0.2160,
@@ -16,12 +19,13 @@ vars =  np.array([-1.9723,-1.9014,-2.2895])
 
 lb = yp - np.exp(vars)
 ub = yp + np.exp(vars)
-plt.plot(x, y, label="actual", color="mediumturquoise")
-plt.plot(x[-3:],  yp, '--', label="predicted", color="darkorange")
+plt.plot(x, y, label="actual", color="mediumturquoise", linewidth=3)
+plt.plot(x[-3:],  yp, '--', label="predicted", color="darkorange", linewidth=3)
 plt.fill_between(x[-3:], lb, ub, color="bisque")
 plt.legend()
 plt.xlabel("Time")
 plt.ylabel("Case count")
+plt.tight_layout()
 plt.savefig("sdm1.png")
 plt.clf()
 y = np.array([-1.2356, -0.9330, -0.2671, -0.3276,
@@ -38,8 +42,8 @@ vars = np.array([-2.0982, -1.3916, -2.2454])
 
 lb = yp - np.exp(vars)
 ub = yp + np.exp(vars)
-plt.plot(x, y, label="actual", color="mediumturquoise")
-plt.plot(x[-3:],  yp, '--', label="predicted", color="darkorange")
+plt.plot(x, y, label="actual", color="mediumturquoise", linewidth=3)
+plt.plot(x[-3:],  yp, '--', label="predicted", color="darkorange", linewidth=3)
 plt.fill_between(x[-3:], lb, ub, color="bisque")
 plt.legend()
 plt.xlabel("Time")
@@ -80,7 +84,7 @@ X_ref = np.array([ 1533.40941176,  1355.99843137,  1329.33921569,  1248.99098039
 
 
 
-plt.plot(X_ref, label="Reference set in time domain", color="lightcoral")
+plt.plot(X_ref, label="Reference set", color="lightcoral", linewidth=3)
 plt.legend()
 plt.xlabel("Time")
 plt.ylabel("Case count")
@@ -122,7 +126,7 @@ plt.clf()
 #     return sigFFTPos, freqAxisPos
 
 # fftPlot(X_ref)
-plt.plot(fft.fft(X_ref).real,label="Reference set in frequency domain",  color="slateblue")
+plt.plot(fft.fft(X_ref).real,label="Reference set",  color="slateblue", linewidth=3)
 plt.xlabel("Frequency")
 plt.ylabel("Magnitude")
 plt.legend()

@@ -21,6 +21,7 @@ parser.add_option("--stride", dest="window_stride", default=10, type="int")
 parser.add_option("--seed", dest="seed", default=0, type="int")
 parser.add_option("--state", dest="state", default=None, type="string") # normal, cnn, slidingwindow, preprocess, slidingwindow_cnn, rag, slidingwindow_rag
 parser.add_option("--disease", dest="disease", type="string", default="flu")
+parser.add_option("--optionals", dest="optionals", type="string", default=" ")
 
 # parser.add_option("-f", "--files", dest="file_names", default="sliding_model_"+str(options.epiweek)+"_True_0.001_500_4", type="string")
 # parser.add_option("-f", "--files", dest="file_names", default="sliding_model_"+str(options.epiweek)+"_True_0.001_500_4", type="string")
@@ -143,14 +144,20 @@ for mt, model_type in enumerate(tqdm(model_types)):
                 elif "nn-bert" in model_type:
                     disease_here = disease_here + "nn-bert_"
             
-            file_to_load = save_model + "_predictions.pkl"
+            if options.optionals != " ":
+                file_to_load = save_model+"_optionals_"+options.optionals+"_predictions.pkl"
+            else:
+                file_to_load = save_model+"_predictions.pkl"
             if "slidingwindow" in model_type or "preprocess" in model_type:
                 directory = "/localscratch/ssinha97/fnp_evaluations/"+disease_here+"_val_predictions_slidingwindow"
             else:
                 directory = "/localscratch/ssinha97/fnp_evaluations/"+disease_here+"_val_predictions_normal"
-            with open(directory+"/"+file_to_load, "rb") as f:
-                # print("\n"+directory+"/"+file_to_load)
-                data_pickle = pickle.load(f)
+            try:
+                with open(directory+"/"+file_to_load, "rb") as f:
+                    # print("\n"+directory+"/"+file_to_load)
+                    data_pickle = pickle.load(f)
+            except:
+                break
 
             rmse_min = np.inf
             # pu.db

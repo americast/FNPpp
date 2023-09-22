@@ -472,7 +472,15 @@ def train(train_seqs, train_seqs_smart, train_symp_seqs, train_symp_seqs_smart, 
     )
 
     # Concat all latent embeddings
-    if "fft" in options.optionals:
+    if "epi" in options.optionals:
+        train_z = torch.stack(
+            [train_seq_z, train_symp_z], dim=1
+        )
+        train_sr = torch.stack(
+            [train_seq_sr, train_symp_sr], dim=1
+        )
+
+    elif "fft" in options.optionals:
         train_z = torch.stack(
             [train_months_z, train_seq_z, train_seq_z_fft, train_symp_z, train_symp_z_fft, train_reg_z], dim=1
         )
@@ -490,8 +498,10 @@ def train(train_seqs, train_seqs_smart, train_symp_seqs, train_symp_seqs_smart, 
     loss, mean_y, _, _ = decoder.forward(
         train_z, train_sr, train_seq, float_tensor(train_y)[:, None]
     )
-
-    losses = month_loss + seq_loss + symp_loss + reg_loss + loss
+    if "epi" in options.optionals:
+        losses = seq_loss + symp_loss + loss
+    else:
+        losses = month_loss + seq_loss + symp_loss + reg_loss + loss
     if "fft" in options.optionals:
         losses += seq_loss_fft + symp_loss_fft
     losses.backward()
@@ -580,7 +590,14 @@ def evaluate(test_seqs, test_seqs_smart, test_symp_seqs, test_symp_seqs_smart, r
     )
 
     # Concat all latent embeddings
-    if "fft" in options.optionals:
+    if "epi" in options.optionals:
+        test_z = torch.stack(
+            [test_seq_z, test_symp_z], dim=1
+        )
+        test_sr = torch.stack(
+            [test_seq_sr, test_symp_sr], dim=1
+        )
+    elif "fft" in options.optionals:
         test_z = torch.stack(
             [test_months_z, test_seq_z, test_seq_z_fft, test_symp_z, test_symp_z_fft, test_reg_z], dim=1
         )
