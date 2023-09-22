@@ -317,7 +317,7 @@ class ScalerFeat:
     
     def inverse_transform_idx_selected_states(self, data, idx=label_idx, state_indices=states_to_consider_indices):
         return data * self.vars[:, idx][states_to_consider_indices] + self.means[:, idx][states_to_consider_indices]
-
+# pu.db
 if options.smart_mode == 5 or options.smart_mode == 8:
     scaler = ScalerFeat(raw_data_unavgd)
 elif  options.smart_mode == 7:
@@ -758,22 +758,40 @@ elif options.bert_emb:
         nn_A=options.nn
     ).to(device)
 else:
-    fnp_enc = RegressionFNP2(
-        dim_x=120,
-        dim_y=1,
-        dim_h=100,
-        size_ref=X_ref.shape[0],
-        n_layers=3,
-        num_M=batch_size,
-        dim_u=60,
-        dim_z=60,
-        use_DAG=False,
-        use_ref_labels=False,
-        add_atten=False,
-        cnn=options.cnn,
-        rag=options.rag,
-        nn_A=options.nn
-    ).to(device)
+    if "combine" in options.optionals:
+        fnp_enc = RegressionFNP2(
+            dim_x=120,
+            dim_y=1,
+            dim_h=100,
+            size_ref=X_ref.shape[0],
+            n_layers=3,
+            num_M=batch_size,
+            dim_u=60,
+            dim_z=60,
+            use_DAG=False,
+            use_ref_labels=False,
+            add_atten=False,
+            cnn=options.cnn,
+            rag=options.rag,
+            nn_A=options.nn
+        ).to(device)
+    else:
+        fnp_enc = RegressionFNP2(
+            dim_x=60,
+            dim_y=1,
+            dim_h=100,
+            size_ref=X_ref.shape[0],
+            n_layers=3,
+            num_M=batch_size,
+            dim_u=60,
+            dim_z=60,
+            use_DAG=False,
+            use_ref_labels=False,
+            add_atten=False,
+            cnn=options.cnn,
+            rag=options.rag,
+            nn_A=options.nn
+        ).to(device)
 
 
 def load_model(folder, file=save_model_name):
@@ -1388,7 +1406,7 @@ def train_step(data_loader, X, Y, X_ref):
         np.array(T_target).ravel(),
     )
 
-
+# pu.db
 def val_step(data_loader, X, Y, X_ref, sample=True):
     """
     Validation step
@@ -1493,10 +1511,13 @@ def val_step(data_loader, X, Y, X_ref, sample=True):
                     all_As = [] 
         return val_err / (i + 1), np.array(YP).ravel(), np.array(T_target).ravel()
 
+save_x, save_y, save_yp, save_var = None, None, None, None
+
 def val_step_with_states(data_loader, X, Y, X_ref, sample=True):
     """
     Validation step
     """
+    global save_x, save_y, save_yp, save_var 
     with torch.set_grad_enabled(False):
         feat_enc.eval()
         seq_enc.eval()
@@ -1569,17 +1590,21 @@ def val_step_with_states(data_loader, X, Y, X_ref, sample=True):
                             x_seq = torch.cat([x_seq, x_seq_fft], dim=-1)
                             x_feat = torch.cat([x_feat, x_feat_fft], dim=-1)
 
-                yp, _, vars, _, _, _, A = fnp_enc.predict(
-                    x_feat, x_seq, float_tensor(X_ref), sample
-                )
-                # if "fft" in options.optionals:
-                #     yp = torch.mean(torch.cat([yp, yp_fft], dim=-1), dim=-1).unsqueeze(-1)
-                val_err += torch.pow(yp - y, 2).mean().sqrt().detach().cpu().numpy()
-                YP.extend(yp.detach().cpu().numpy().tolist())
-                T_target.extend(y.detach().cpu().numpy().tolist())
-                all_vars.extend(vars.detach().cpu().numpy().tolist())
-                all_As.append(A.cpu().numpy())
-                states_here.extend(st)
+                    yp, _, vars, _, _, _, A = fnp_enc.predict(
+                        x_feat, x_seq, float_tensor(X_ref), sample
+                    )
+                    # if "fft" in options.optionals:
+                    #     yp = torch.mean(torch.cat([yp, yp_fft], dim=-1), dim=-1).unsqueeze(-1)
+                    val_err += torch.pow(yp - y, 2).mean().sqrt().detach().cpu().numpy()
+                    YP.extend(yp.detach().cpu().numpy().tolist())
+                    T_target.extend(y.detach().cpu().numpy().tolist())
+                    all_vars.extend(vars.detach().cpu().numpy().tolist())
+                    all_As.append(A.cpu().numpy())
+                    states_here.extend(st)
+                    save_x = x
+                    save_y = y
+                    save_yp = yp
+                    save_var = vars
             else:
                 for i, (x, x_weeks, y, st) in enumerate(data_loader):
                     if options.bert_emb:
@@ -1632,16 +1657,20 @@ def val_step_with_states(data_loader, X, Y, X_ref, sample=True):
                         # else:
                         x_feat = feat_enc(float_tensor(x)) # Converts [128, 119, 5] to [128, 60]
 
-                yp, _, vars, _, _, _, A = fnp_enc.predict(
-                    x_feat, x_seq, float_tensor(X_ref), sample
-                )
-                # pu.db
-                val_err += torch.pow(yp - y, 2).mean().sqrt().detach().cpu().numpy()
-                YP.extend(yp.detach().cpu().numpy().tolist())
-                T_target.extend(y.detach().cpu().numpy().tolist())
-                all_vars.extend(vars.detach().cpu().numpy().tolist())
-                all_As.append(A.cpu().numpy())
-                states_here.extend(st)
+                    yp, _, vars, _, _, _, A = fnp_enc.predict(
+                        x_feat, x_seq, float_tensor(X_ref), sample
+                    )
+                    # pu.db
+                    val_err += torch.pow(yp - y, 2).mean().sqrt().detach().cpu().numpy()
+                    YP.extend(yp.detach().cpu().numpy().tolist())
+                    T_target.extend(y.detach().cpu().numpy().tolist())
+                    all_vars.extend(vars.detach().cpu().numpy().tolist())
+                    all_As.append(A.cpu().numpy())
+                    states_here.extend(st)
+                    save_x = x
+                    save_y = y
+                    save_yp = yp
+                    save_var = vars
             YP = [x[0] for x in YP]
             T_target = [x[0] for x in T_target]
             all_vars = [x[0] for x in all_vars]
@@ -1722,7 +1751,7 @@ for ep in range(epochs):
     if ep > 100 and ep - min_val_epoch > patience:
         break
     kkk += 1
-
+# pu.db
 if options.sliding_window:
     os.makedirs(f"/localscratch/ssinha97/fnp_evaluations/"+disease+"_val_predictions_slidingwindow", exist_ok=True)
     with open(f"/localscratch/ssinha97/fnp_evaluations/"+disease+"_val_predictions_slidingwindow/"+str(save_model_name)+"_predictions.pkl", "wb") as f:
