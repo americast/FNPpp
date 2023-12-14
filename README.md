@@ -1,5 +1,5 @@
-# CDC-Forecasting
-Repo for our CDC forecasting efforts
+# FNP++
+Repo for our forecasting efforts towards FNP++
 
 ## Data generation
 
